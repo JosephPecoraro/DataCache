@@ -13,6 +13,8 @@ function DataCache(group, origin, version) {
     this.origin = origin;
     this.completeness = 'incomplete';
     this.version = version || 0;
+
+    this.managed = {};
 }
 
 DataCache.IDLE = 0;
@@ -82,6 +84,10 @@ DataCache.prototype = {
 
     eachModificationSince: function(version, callback, successCallback) {
 
+    },
+
+    manage: function(uri, resource) {
+        this.managed[uri] = resource;
     }
 };
 
@@ -94,7 +100,6 @@ function CacheTransaction(cache) {
     this.cache = cache;
     this.status = CacheTransaction.PENDING;
     this.oncommitted = function() {};
-    this.managed = {};
 }
 
 CacheTransaction.prototype = {
@@ -115,18 +120,68 @@ CacheTransaction.prototype = {
             throw "CacheTransaction: can only capture a PENDING transaction";
 
         var baseURI = host.realHost.location.host; // NOTE: this is always the window
-        var absoluteURI = this._resolveAbsoluteFromBase(baseURI, uri);
+        var absoluteURI = this._resolveAbsoluteFromBase(host.realHost.location, uri);
 
         // TODO: Error checking on the URI
 
         var cache = tx.cache;
-        delete this.managed[absoluteURI];
+        delete cache.managed[absoluteURI];
         this._captureSubsteps();
     },
 
-    _resolveAbsoluteFromBase: function(base, uri) {
-        // FIXME: needs a generic algorithm
-        return uri.replace(base, '');
+    _resolveAbsoluteFromBase: function(location, uri) {
+
+        // Remove scheme if it exists
+        function stripScheme(s) {
+            return (s.match(/^.*?:\/\//) ? s.substring(s.indexOf('://')+3) : s);
+        }
+
+        // Remove host if it exists
+        function stripHost(s) {
+            return (s.indexOf(host) === 0 ? s.substring(host.length) : s);
+        }
+
+        // on page: http://example.com/foo/bar.txt
+        //   host       => example.com
+        //   currentDir => example.com/foo/
+        var host = location.host;
+        var currentDir = location.href.substring(0, location.href.lastIndexOf('/')+1);
+        currentDir = stripHost(stripScheme(currentDir));
+        uri = stripHost(stripScheme(uri));
+
+        //  The result may start with an absolute path from the root
+        //  or a relative path from the current directory
+        var str = '';
+        if (uri.charAt(0) === '/')
+            uri = uri.substring(1);
+        else {
+            if (currentDir.charAt(currentDir.length-1) == '/')
+                str = currentDir.substring(0, currentDir.length-1);
+            else
+                str = currentDir; // This case is not tested... location.href doesn't end in a slash? can browsers do this?
+        }
+
+        // Handle remaining sections
+        //   .. means move up a directory
+        //   anything else means append a new directory/part
+        var parts = uri.split('/');
+        for (var i=0, len=parts.length; i<len; ++i) {
+            var part = parts[i];
+            if (part.length === 0)
+                continue;
+
+            switch (part) {
+                case '..':
+                    str = str.substring(0, str.lastIndexOf('/'));
+                    break;
+                default:
+                    str += '/' + part;
+                    break;
+            }
+        }
+
+        // Return absolute representation
+        return str;
     }
 };
 
@@ -188,11 +243,12 @@ OfflineTransaction.prototype = {
     },
 
     _captureSubsteps: function(uri, methods, content, contentType) {
-        this.cache.manage(uri, methods, {
+        this.cache.manage(uri, {
+            methods: methods,
             representation: content,
             type: (contentType || 'text/plain')
         });
-        // queue event "captured"
+        this.cache.host.queueTask('captured', this.cache, uri);
     }
 }
 

@@ -11,6 +11,37 @@ context('Basics', function() {
 });
 
 
+context('Resolving Absolute URLs', function() {
+    var resolve = CacheTransaction.prototype._resolveAbsoluteFromBase;
+    var location = { href: 'http://example.com/foo/bar.txt', host: 'example.com' }
+
+    should('resolve properly', function() {
+
+        // Already Full
+        ok(resolve(location, 'http://example.com/foo/bar.txt') === '/foo/bar.txt');
+        ok(resolve(location, 'http://example.com/foo/bar/baz.txt') === '/foo/bar/baz.txt');
+
+        // Absolute, from host
+        ok(resolve(location, '/foo/bar.txt') === '/foo/bar.txt');
+        ok(resolve(location, '/foo/bar/baz.txt') === '/foo/bar/baz.txt');
+
+        // Relative from Current Directory
+        ok(resolve(location, 'foo/bar.txt') === '/foo/foo/bar.txt');
+        ok(resolve(location, 'foo/bar/baz.txt') === '/foo/foo/bar/baz.txt');
+
+        // Relative with tricks
+        ok(resolve(location, 'foo/../bar.txt') === '/foo/bar.txt');
+        ok(resolve(location, 'foo/../bar/baz.txt') === '/foo/bar/baz.txt');
+        ok(resolve(location, 'a/b/c/../../d/../../bar/baz.txt') === '/foo/bar/baz.txt');
+
+        // Absolute + Relative attempt to go above host
+        ok(resolve(location, '../../../bar.txt') === '/bar.txt');
+        ok(resolve(location, '/../../../bar.txt') === '/bar.txt');
+
+    });
+});
+
+
 // Testing private code
 context('DataCacheGroup/Host', function() {
     var cache = window.openDataCache();

@@ -9,10 +9,10 @@
 // -------------
 
 function DataCache(group, origin, version) {
-    this._group = group;
-    this._origin = origin;
-    this._completeness = 'incomplete';
-    this._version = version || 0;
+    this.group = group;
+    this.origin = origin;
+    this.completeness = 'incomplete';
+    this.version = version || 0;
 }
 
 DataCache.IDLE = 0;
@@ -23,14 +23,6 @@ DataCache.UPDATING = 3; // Hidden (non-standard)
 DataCache.prototype = {
     get requiredCookie() {
         return undefined;
-    },
-
-    get version() {
-        return this._version;
-    },
-
-    get group() {
-        return this._group;
     },
 
     _createCacheTransaction: function(group, offline) {
@@ -338,6 +330,7 @@ CacheEvent.prototype = {
             this._nextVersion++;
             this.add(cache);
             this.status = DataCache.IDLE;
+            DataCacheGroupController.save(this);
             return cache;
         },
 
@@ -351,11 +344,61 @@ CacheEvent.prototype = {
         }
     }
 
-    // FIXME: Implement (load and save to storage)
+
+    // --------------------------------------------
+    //   DataCacheGroupController (save-and-load)
+    // --------------------------------------------
+
     DataCacheGroupController = {
-        load: function() {},
-        save: function() {}
-    };
+        key: 'datacachegroup',
+
+        load: function() {
+            var jsonString = window.localStorage[DataCacheGroupController.key];
+            if (!jsonString)
+                return;
+
+            // TODO: Handle managed resources
+            var savedObj = JSON.parse(jsonString);
+            var host = this._createDataCacheHost();
+            var group = this._createDataCacheGroup(host, window.location.host);
+            for (var i in savedObj.v) {
+                var v = savedObj.v[i];
+                group.versions[i] = this._createDataCache(group, v.origin, v.version, v.completeness);
+            }
+
+            return group;
+        },
+
+        save: function(group) {
+            // TODO: Handle managed resources
+            var savedObj = { _nextVersion: group._nextVersion, v: {} };
+            for (var i in group.versions) {
+                var version = group.versions[i];
+                savedObj.v[i] = {
+                    origin: version.origin,
+                    completeness: version.completeness,
+                    version: version.version
+                };
+            }
+
+            var jsonString = JSON.stringify(savedObj);
+            window.localStorage[DataCacheGroupController.key] = jsonString;
+        },
+
+        _createDataCache: function(group, origin, version, completeness) {
+            var cache = new DataCache(group, origin, version);
+            cache.completeness = completeness;
+            return cache;
+        },
+
+        _createDataCacheHost: function() {
+            return new DataCacheHost(window);
+        },
+
+        _createDataCacheGroup: function(host, origin) {
+            return new DataCacheGroup(host, origin);
+        }
+    }
 
 
     // ---------------------

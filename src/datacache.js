@@ -4,6 +4,16 @@
  */
 
 
+// ---------------------------
+//   Object Oriented Helpers
+// ---------------------------
+
+// Valid for WebKit and Firefox, the supported browsers
+function subclass(child, parent) {
+    child.prototype.__proto__ = parent.prototype;
+}
+
+
 // -------------
 //   DataCache
 // -------------
@@ -123,10 +133,11 @@ CacheTransaction.prototype = {
         var absoluteURI = this._resolveAbsoluteFromBase(host.realHost.location, uri);
 
         // TODO: Error checking on the URI
+        // FIXME: ^^
 
         var cache = tx.cache;
         delete cache.managed[absoluteURI];
-        this._captureSubsteps();
+        this._captureSubsteps(uri, methods, content, contentType);
     },
 
     _resolveAbsoluteFromBase: function(location, uri) {
@@ -199,14 +210,12 @@ function OnlineTransaction(cache) {
 }
 
 OnlineTransaction.prototype = {
-    __proto__: CacheTransaction,
-
     get offline() {
         return false;
     },
 
     capture: function(uri, dynamicMethods) {
-        this._capture(uri, this.host, this, dynamicMethods);
+        this._capture(uri, this.cache.group.host, this, dynamicMethods);
     },
 
     abort: function() {
@@ -217,10 +226,41 @@ OnlineTransaction.prototype = {
         this.cache.queueCacheEvent('error');
     },
 
-    _captureSubsteps: function() {
+    _captureSubsteps: function(uri, methods) {
+        this.cache.group.host.queueTask('fetching', this.cache, uri);
 
+        // This is a raw fetch of the data
+        var self = this;
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", uri); // asynchronous
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200 || xhr.status === 0)
+                    self._captureSuccess(xhr, uri, methods);
+                else
+                    self._captureFailure(xhr);
+            }
+        }
+        xhr.send();
+
+    },
+
+    _captureSuccess: function(xhr, uri, methods) {
+        console.log('success', xhr);
+        this.cache.manage(uri, {
+            methods: methods,
+            body: xhr.responseText, // FIXME: binary?
+            type: xhr.getResponseHeader('Content-Type') || 'text/plain' // FIXME: determine from filetype as well?
+        });
+        this.cache.group.host.queueTask('captured');
+    },
+
+    _captureFailure: function(xhr) {
+        console.log('failure', xhr);
     }
 }
+
+subclass(OnlineTransaction, CacheTransaction);
 
 
 // ----------------------
@@ -232,25 +272,25 @@ function OfflineTransaction(cache) {
 }
 
 OfflineTransaction.prototype = {
-    __proto__: CacheTransaction,
-
     get offline() {
         return true;
     },
 
     capture: function(uri, body, contentType, dynamicMethods) {
-        this._capture(uri, this.host, this, dynamicMethods, body, contentType);
+        this._capture(uri, this.cache.group.host, this, dynamicMethods, body, contentType);
     },
 
     _captureSubsteps: function(uri, methods, content, contentType) {
         this.cache.manage(uri, {
             methods: methods,
-            representation: content,
+            body: content,
             type: (contentType || 'text/plain')
         });
-        this.cache.host.queueTask('captured', this.cache, uri);
+        this.cache.group.host.queueTask('captured', this.cache, uri);
     }
 }
+
+subclass(OfflineTransaction, CacheTransaction);
 
 
 // -------------

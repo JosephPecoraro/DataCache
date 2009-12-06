@@ -85,9 +85,10 @@ context('Offline Transaction', function() {
     var callbackFlag = false;
 
     should('trigger off-line-updating event', function() {
-        window.addEventListener('off-line-updating', function(c) {
+        window.addEventListener('off-line-updating', function handler(c) {
             eventFlag = true;
             eventCache = c;
+            window.removeEventListener('off-line-updating', handler);
         }, false);
 
         var cache = window.openDataCache();
@@ -98,6 +99,26 @@ context('Offline Transaction', function() {
         ok(eventFlag, "did fire");
         setTimeout(function() { ok(eventCache === cache, "correct cache"); });
         setTimeout(function() { ok(callbackFlag, "did fire"); });
+    });
+});
+
+
+context('Offline Capture', function() {
+    should('capture and manage a resource', function() {
+        var body = 'Hello, World!';
+        var uri = 'blah.html';
+
+        var cache = window.openDataCache();
+        cache.offlineTransaction(function(tx) {
+            tx.capture(uri, body, 'text/plain', 'GET');
+        });
+
+        function verify() {
+            cache.swapCache();
+            return window.openDataCache().managed[uri].body;
+        }
+
+        setTimeout(function() { ok(verify() === body); });
     });
 });
 

@@ -42,6 +42,35 @@ context('Resolving Absolute URLs', function() {
 });
 
 
+context('Parsing Headers', function() {
+    var parse = CacheTransaction.prototype.parseHeaders;
+    var headersText = [
+        'Date: Sun, 06 Dec 2009 05:19:04 GMT',
+        'Content-Encoding: gzip',
+        'Content-Length: 3447',
+        'Content-Type: text/html; charset=UTF-8',
+        'Cache-Control: private, max-age=0',
+        'X-Xss-Protection:   0',                   // ignore left pad after colon
+        '  Server: gws',                           // ignore left pad
+        '  ',                                      // ignore blank line
+        'Expires: -2',                             // gets overwritten later on
+        'Expires: -1'
+    ].join("\n");
+
+    should('create a nice object', function() {
+        var obj = parse(headersText);
+        ok(obj['Cache-Control'] === "private, max-age=0");
+        ok(obj['Content-Encoding'] === "gzip");
+        ok(obj['Content-Length'] === "3447");
+        ok(obj['Content-Type'] === "text/html; charset=UTF-8");
+        ok(obj['Date'] === "Sun, 06 Dec 2009 05:19:04 GMT");
+        ok(obj['Expires'] === "-1");
+        ok(obj['Server'] === "gws");
+        ok(obj['X-Xss-Protection'] === "0");
+    });
+});
+
+
 // Testing private code
 context('DataCacheGroup/Host', function() {
     var cache = window.openDataCache();
@@ -110,7 +139,7 @@ context('Offline Capture', function() {
 
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
-            tx.capture(uri, body, 'text/plain', 'GET');
+            tx.capture(uri, body, 'text/plain', ['GET']);
         });
 
         function verify() {

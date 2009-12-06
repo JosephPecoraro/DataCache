@@ -193,6 +193,29 @@ CacheTransaction.prototype = {
 
         // Return absolute representation
         return str;
+    },
+
+    parseHeaders: function(headersText) {
+
+        // Remove leading whitespace
+        function trimLeft(s) {
+            return s.replace(/^\s+/, '');
+        }
+
+        // Convert HTTP key/value pairs into a hash
+        var headers = {};
+        var lines = headersText.split(/\n/);
+        for (var i=0, len=lines.length; i<len; ++i) {
+            var line = trimLeft(lines[i]);
+            var colonIndex = line.indexOf(':');
+            if (colonIndex !== -1) {
+                var key = line.substring(0, colonIndex);
+                var value = trimLeft(line.substring(colonIndex+1));
+                headers[key] = value;
+            }
+        }
+
+        return headers;
     }
 };
 
@@ -229,7 +252,6 @@ OnlineTransaction.prototype = {
     _captureSubsteps: function(uri, methods) {
         this.cache.group.host.queueTask('fetching', this.cache, uri);
 
-        // This is a raw fetch of the data
         var self = this;
         var xhr = new XMLHttpRequest();
         xhr.open("GET", uri); // asynchronous
@@ -241,16 +263,21 @@ OnlineTransaction.prototype = {
                     self._captureFailure(xhr);
             }
         }
-        xhr.send();
 
+        xhr.send();
     },
 
     _captureSuccess: function(xhr, uri, methods) {
         console.log('success', xhr);
+        var body = xhr.responseText; // FIXME: binary?
+        var type = xhr.getResponseHeader('Content-Type') || 'text/plain'; // FIXME: determine from filetype as well?
+        var headers = this.parseHeaders(xhr.getAllResponseHeaders());
+
         this.cache.manage(uri, {
             methods: methods,
-            body: xhr.responseText, // FIXME: binary?
-            type: xhr.getResponseHeader('Content-Type') || 'text/plain' // FIXME: determine from filetype as well?
+            body: body,
+            type: type,
+            headers: headers
         });
         this.cache.group.host.queueTask('captured');
     },

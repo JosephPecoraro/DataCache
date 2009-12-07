@@ -75,9 +75,11 @@ DataCache.prototype = {
             setTimeout(function(tx) {
                 try { callback.call(host, tx); }
                 catch (e) {
-                    setTimeout(function() {
-                        errorCallback.call(host);
-                    }, 0);
+                    if (errorCallback) {
+                        setTimeout(function() {
+                            errorCallback.call(host);
+                        }, 0);
+                    }
                 }
             }, 0, transaction);
         }
@@ -103,13 +105,106 @@ DataCache.prototype = {
     },
 
     eachModificationSince: function(version, callback, successCallback) {
-
+        this.group.eachModificationFromTo(this.version, version, callback, successCallback);
     },
 
     manage: function(uri, resource) {
         this.managed[uri] = resource;
+    },
+
+    removeItem: function(uri) {
+        var resolved = DataCache.resolveAbsoluteFromBase(window.location, uri);
+        this.removeItemResolved(resolved);
+    },
+
+    removeItemResolved: function(resolvedURI) {
+        delete this.managed[resolvedURI];
+    },
+
+    getItem: function(uri) {
+        var resolved = DataCache.resolveAbsoluteFromBase(window.location, uri);
+        return this.getItemResolved(resolved);
+    },
+
+    getItemResolved: function(resolvedURI) {
+        var item = this.managed[resolvedURI];
+        if (!item)
+            throw 'DataCache: no such item'; // FIXME: raise NOT_FOUND_ERR
+
+        return item;
     }
-};
+}
+
+
+// --------------------
+//   Global Functions
+// --------------------
+
+DataCache.resolveAbsoluteFromBase = function(location, uri) {
+
+    // Remove scheme if it exists
+    function stripScheme(s) {
+        return (s.match(/^.*?:\/\//) ? s.substring(s.indexOf('://')+3) : s);
+    }
+
+    // Remove host if it exists
+    function stripHost(s) {
+        return (s.indexOf(host) === 0 ? s.substring(host.length) : s);
+    }
+
+    // Remove fragment if it exists
+    function stripFragment(s) {
+        var hashIndex = s.indexOf('#');
+        return (hashIndex !== -1 ? s.substring(0, hashIndex) : s);
+    }
+
+    // Combined
+    function stripComponents(s) {
+        return stripFragment(stripHost(stripScheme(s)));
+    }
+
+    // on page: http://example.com/foo/bar.txt
+    //   host       => example.com
+    //   currentDir => example.com/foo/
+    var host = location.host;
+    var currentDir = location.href.substring(0, location.href.lastIndexOf('/')+1);
+    currentDir = stripComponents(currentDir);
+    uri = stripComponents(uri);
+
+    //  The result may start with an absolute path from the root
+    //  or a relative path from the current directory
+    var str = '';
+    if (uri.charAt(0) === '/')
+        uri = uri.substring(1);
+    else {
+        if (currentDir.charAt(currentDir.length-1) == '/')
+            str = currentDir.substring(0, currentDir.length-1);
+        else
+            str = currentDir; // This case is not tested... location.href doesn't end in a slash? can browsers do this?
+    }
+
+    // Handle remaining sections
+    //   .. means move up a directory
+    //   anything else means append a new directory/part
+    var parts = uri.split('/');
+    for (var i=0, len=parts.length; i<len; ++i) {
+        var part = parts[i];
+        if (part.length === 0)
+            continue;
+
+        switch (part) {
+            case '..':
+                str = str.substring(0, str.lastIndexOf('/'));
+                break;
+            default:
+                str += '/' + part;
+                break;
+        }
+    }
+
+    // Return absolute representation
+    return str;
+}
 
 
 // --------------------------------
@@ -124,14 +219,44 @@ function CacheTransaction(cache) {
 
 CacheTransaction.prototype = {
     getItem: function(uri, callback) {
-
+        var item = this.cache.getItem(uri);
+        setTimeout(function() {
+            callback.call(this, item);
+        }, 0);
     },
 
     release: function(uri) {
+        if (this.status !== CacheTransaction.PENDING)
+            throw "CacheTransaction: can only capture a PENDING transaction";
 
+        var cache = this.cache;
+        var host = cache.group.host;
+
+        var location = host.realHost.location; // NOTE: realHost is always window
+        this._checkURI(location, uri);
+        var absoluteURI = DataCache.resolveAbsoluteFromBase(location, uri);
+
+        var item = cache.getItem(absoluteURI);
+        item.readyState = CacheItem.GONE;
+        cache.group.host.queueTask('released');
     },
 
     commit: function() {
+        if (this.status !== CacheTransaction.PENDING)
+            throw "CacheTransaction: can only capture a PENDING transaction";
+
+        var cache = this.cache;
+        var group = cache.group;
+
+        group.update(cache);
+        this.status = CacheTransaction.COMMITTED; // ?!?!
+
+        // FIXME: make commitSubsteps
+        if (this.offline)
+            group.effectiveCache = cache;
+        else
+            group.status = DataCache.IDLE;
+        // FIXME: special queueTask?
 
     },
 
@@ -141,11 +266,11 @@ CacheTransaction.prototype = {
 
         var location = host.realHost.location; // NOTE: realHost is always window
         this._checkURI(location, uri);
-        var absoluteURI = this._resolveAbsoluteFromBase(location, uri);
+        var absoluteURI = DataCache.resolveAbsoluteFromBase(location, uri);
 
         var cache = tx.cache;
-        delete cache.managed[absoluteURI];
-        this._captureSubsteps(uri, methods, content, contentType);
+        cache.removeItemResolved(absoluteURI);
+        this._captureSubsteps(absoluteURI, methods, content, contentType);
     },
 
     _checkURI: function(location, uri) {
@@ -157,7 +282,7 @@ CacheTransaction.prototype = {
 
         // Check scheme
         var m = uri.match(/^(\w+):\/\//);
-        if (m && m[1] !== location.scheme)
+        if (m && m[1] !== location.protocol)
             throw "CacheTransaction: scheme change in attempted cache";
 
         // Check host
@@ -168,72 +293,6 @@ CacheTransaction.prototype = {
                 throw "CacheTransaction: host change in attempted cache";
         }
 
-    },
-
-    _resolveAbsoluteFromBase: function(location, uri) {
-
-        // Remove scheme if it exists
-        function stripScheme(s) {
-            return (s.match(/^.*?:\/\//) ? s.substring(s.indexOf('://')+3) : s);
-        }
-
-        // Remove host if it exists
-        function stripHost(s) {
-            return (s.indexOf(host) === 0 ? s.substring(host.length) : s);
-        }
-
-        // Remove fragment if it exists
-        function stripFragment(s) {
-            var hashIndex = s.indexOf('#');
-            return (hashIndex !== -1 ? s.substring(0, hashIndex) : s);
-        }
-
-        // Combined
-        function stripComponents(s) {
-            return stripFragment(stripHost(stripScheme(s)));
-        }
-
-        // on page: http://example.com/foo/bar.txt
-        //   host       => example.com
-        //   currentDir => example.com/foo/
-        var host = location.host;
-        var currentDir = location.href.substring(0, location.href.lastIndexOf('/')+1);
-        currentDir = stripComponents(currentDir);
-        uri = stripComponents(uri);
-
-        //  The result may start with an absolute path from the root
-        //  or a relative path from the current directory
-        var str = '';
-        if (uri.charAt(0) === '/')
-            uri = uri.substring(1);
-        else {
-            if (currentDir.charAt(currentDir.length-1) == '/')
-                str = currentDir.substring(0, currentDir.length-1);
-            else
-                str = currentDir; // This case is not tested... location.href doesn't end in a slash? can browsers do this?
-        }
-
-        // Handle remaining sections
-        //   .. means move up a directory
-        //   anything else means append a new directory/part
-        var parts = uri.split('/');
-        for (var i=0, len=parts.length; i<len; ++i) {
-            var part = parts[i];
-            if (part.length === 0)
-                continue;
-
-            switch (part) {
-                case '..':
-                    str = str.substring(0, str.lastIndexOf('/'));
-                    break;
-                default:
-                    str += '/' + part;
-                    break;
-            }
-        }
-
-        // Return absolute representation
-        return str;
     },
 
     parseHeaders: function(headersText) {
@@ -299,8 +358,10 @@ OnlineTransaction.prototype = {
         var xhr = new XMLHttpRequest();
         xhr.open("GET", uri); // asynchronous
         xhr.onreadystatechange = function() {
+            // Workaround for local file XHRs
+            var statusCanBeZero = /^file/.test(window.location.protocol);
             if (xhr.readyState === 4) {
-                if (xhr.status === 200 || xhr.status === 0)
+                if (xhr.status === 200 || (statusCanBeZero && xhr.status === 0))
                     self._captureSuccess(xhr, uri, methods);
                 else
                     self._captureFailure(xhr);
@@ -319,7 +380,7 @@ OnlineTransaction.prototype = {
         var headers = this.parseHeaders(xhr.getAllResponseHeaders());
         var item = new CacheItem(CacheItem.CACHED, body, type, methods, headers);
         this.cache.manage(uri, item);
-        this.cache.group.host.queueTask('captured');
+        this.cache.group.host.queueTask('captured', this.cache, uri);
     },
 
     _captureFailure: function(xhr) {

@@ -1,5 +1,16 @@
 var LATENCY = 500;
 
+function basicEventChecker(type, object, flag, extra) {
+    object[flag] = false;
+    window.addEventListener(type, function handler(c) {
+        window.removeEventListener(type, handler, false);
+        object[flag] = true;
+        if (extra)
+            extra();
+    }, false);
+}
+
+
 context('Basics', function() {
     should('have public methods', function() {
         ok(window.openDataCache !== undefined, "window.openDataCache exists");
@@ -14,7 +25,7 @@ context('Basics', function() {
 
 
 context('Resolving Absolute URLs', function() {
-    var resolve = CacheTransaction.prototype._resolveAbsoluteFromBase;
+    var resolve = DataCache.resolveAbsoluteFromBase;
     var location = { href: 'http://example.com/foo/bar.txt', host: 'example.com' }
 
     should('resolve properly', function() {
@@ -115,39 +126,37 @@ context('DataCache', function() {
 
 
 context('Offline Transaction', function() {
-    var eventFlag = false;
+    var flags = {};
     var eventCache = null;
     var callbackFlag = false;
 
     should('trigger off-line-updating event', function() {
         stop();
-        window.addEventListener('off-line-updating', function handler(c) {
-            window.removeEventListener('off-line-updating', handler, false);
-            eventFlag = true;
+        basicEventChecker('off-line-updating', flags, 'firedOfflineUpdating', function(c) {
             eventCache = c;
-        }, false);
+        });
 
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
-            callbackFlag = true;
+            flags.callbackFlag = true;
         });
 
         setTimeout(function() {
-            ok(eventFlag, "did fire");
+            ok(flags.firedOfflineUpdating, "did fire");
+            ok(flags.callbackFlag, "did fire");
             ok(eventCache !== cache, "new cache");
-            ok(callbackFlag, "did fire");
             start();
-        }); // no latency needed, these are all queued setTimeouts
+        }); // no latency needed, these are all queued setTimeout's
     });
 });
 
 
 context('Offline Capture', function() {
+    var body = 'Hello, World!';
+    var uri = 'blah.html';
+
     should('capture and manage a resource', function() {
         stop();
-        var body = 'Hello, World!';
-        var uri = 'blah.html';
-
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
             tx.capture(uri, body, 'text/plain', ['GET']);
@@ -155,13 +164,32 @@ context('Offline Capture', function() {
 
         function verify() {
             cache.swapCache();
-            return window.openDataCache().managed[uri].body;
+            var item = window.openDataCache().getItem(uri);
+            ok(item.body === body, "proper data");
+            ok(item.readyState === CacheItem.CACHED);
         }
 
         setTimeout(function() {
-            ok(verify() === body);
+            verify();
             start();
-        }, LATENCY);
+        });
+    });
+
+    should('capture and release a resource', function() {
+        stop();
+        var txCache = null;
+
+        var cache = window.openDataCache();
+        cache.offlineTransaction(function(tx) {
+            tx.capture(uri, body, 'text/plain', ['GET']);
+            tx.release(uri);
+            txCache = tx.cache;
+        });
+
+        setTimeout(function() {
+            ok(txCache.getItem(uri).readyState === CacheItem.GONE, 'no longer stored');
+            start();
+        });
     });
 });
 
@@ -180,7 +208,7 @@ context('Online Transaction', function() {
             txCache = tx.cache;
         });
         setTimeout(function() {
-            ok(txCache.managed[uri].body === 'Hello, World!');
+            ok(txCache.getItem(uri).body === 'Hello, World!');
             start();
         }, LATENCY);
     });
@@ -191,7 +219,7 @@ context('Online Transaction', function() {
         var tx = cache.transactionSync();
         tx.capture(uri);
         setTimeout(function() {
-            ok(tx.cache.managed[uri].body === 'Hello, World!');
+            ok(tx.cache.getItem(uri).body === 'Hello, World!');
             start();
         }, LATENCY);
     });
@@ -200,23 +228,19 @@ context('Online Transaction', function() {
 
 context('Online Transaction with 4xx or 5xx error', function() {
     var uri = 'code.php?code=500';
-    var firedErrorEvent = false;
+    var flags = {};
 
     should('fire error event', function() {
         stop();
 
-        window.addEventListener('error', function handler(c) {
-            window.removeEventListener('error', handler, false);
-            firedErrorEvent = true;
-        }, false);
-
+        basicEventChecker('error', flags, 'firedErrorEvent');
         var cache = window.openDataCache();
         cache.transaction(function(tx) {
             tx.capture(uri);
         });
 
         setTimeout(function() {
-            ok(firedErrorEvent, "did fire");
+            ok(flags.firedErrorEvent, "did fire");
             start();
         }, LATENCY);
     });
@@ -225,23 +249,18 @@ context('Online Transaction with 4xx or 5xx error', function() {
 
 context('Online Transaction with 401', function() {
     var uri = 'code.php?code=401';
-    var firedObsoleteEvent = false;
+    var flags = {};
     var cache = window.openDataCache();
 
     should('make fire obsolete event and make obsolete', function() {
         stop();
-
-        window.addEventListener('obsolete', function handler(c) {
-            window.removeEventListener('obsolete', handler, false);
-            firedObsoleteEvent = true;
-        }, false);
-
+        basicEventChecker('obsolete', flags, 'firedObsoleteEvent');
         cache.transaction(function(tx) {
             tx.capture(uri);
         });
 
         setTimeout(function() {
-            ok(firedObsoleteEvent, "did fire");
+            ok(flags.firedObsoleteEvent, "did fire");
             ok(cache.group.status === DataCache.OBSOLETE, "group became obsolete");
             start();
         }, LATENCY);

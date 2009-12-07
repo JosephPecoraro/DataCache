@@ -1,3 +1,5 @@
+var LATENCY = 500;
+
 context('Basics', function() {
     should('have public methods', function() {
         ok(window.openDataCache !== undefined, "window.openDataCache exists");
@@ -45,11 +47,11 @@ context('Resolving Absolute URLs', function() {
 context('Parsing Headers', function() {
     var parse = CacheTransaction.prototype.parseHeaders;
     var headersText = [
-        'Date: Sun, 06 Dec 2009 05:19:04 GMT',
-        'Content-Encoding: gzip',
-        'Content-Length: 3447',
-        'Content-Type: text/html; charset=UTF-8',
-        'Cache-Control: private, max-age=0',
+        'Date: Sun, 06 Dec 2009 05:19:04 GMT',     // typical data
+        'Content-Encoding: gzip',                  // typical data
+        'Content-Length: 3447',                    // typical data
+        'Content-Type: text/html; charset=UTF-8',  // typical data
+        'Cache-Control: private, max-age=0',       // typical data
         'X-Xss-Protection:   0',                   // ignore left pad after colon
         '  Server: gws',                           // ignore left pad
         '  ',                                      // ignore blank line
@@ -88,7 +90,7 @@ context('DataCacheGroup/Host', function() {
         ok(cache.group === newCache.group, "Same Group");
         ok(version < newVersion, "Version are in the proper order");
 
-        ok(group.effectiveCache !== newCache, "Effective is Last Newest");
+        ok(group.effectiveCache !== newCache, "Effective is not Newest");
         ok(group.relevantCache  === newCache, "Relevant is Newest");
         group.remove(newCache);
         ok(group.effectiveCache === cache, "Effective is newest");
@@ -114,6 +116,7 @@ context('Offline Transaction', function() {
     var callbackFlag = false;
 
     should('trigger off-line-updating event', function() {
+        stop();
         window.addEventListener('off-line-updating', function handler(c) {
             eventFlag = true;
             eventCache = c;
@@ -125,15 +128,19 @@ context('Offline Transaction', function() {
             callbackFlag = true;
         });
 
-        ok(eventFlag, "did fire");
-        setTimeout(function() { ok(eventCache === cache, "correct cache"); });
-        setTimeout(function() { ok(callbackFlag, "did fire"); });
+        setTimeout(function() {
+            ok(eventFlag, "did fire");
+            ok(eventCache !== cache, "new cache");
+            ok(callbackFlag, "did fire");
+            start();
+        }); // no latency needed, these are all queued setTimeouts
     });
 });
 
 
 context('Offline Capture', function() {
     should('capture and manage a resource', function() {
+        stop();
         var body = 'Hello, World!';
         var uri = 'blah.html';
 
@@ -147,7 +154,42 @@ context('Offline Capture', function() {
             return window.openDataCache().managed[uri].body;
         }
 
-        setTimeout(function() { ok(verify() === body); });
+        setTimeout(function() {
+            ok(verify() === body);
+            start();
+        }, LATENCY);
     });
 });
 
+
+
+context('Online Transaction', function() {
+    var uri = 'data.txt';
+    var asyncData = null;
+    var syncData = null;
+
+    should('work asynchronously', function() {
+        stop();
+        var cache = window.openDataCache();
+        var txCache = null;
+        cache.transaction(function(tx) {
+            tx.capture(uri);
+            txCache = tx.cache;
+        });
+        setTimeout(function() {
+            ok(txCache.managed[uri].body === 'Hello, World!');
+            start();
+        }, LATENCY);
+    });
+
+    should('work synchronously', function() {
+        stop();
+        var cache = window.openDataCache();
+        var tx = cache.transactionSync();
+        tx.capture(uri);
+        setTimeout(function() {
+            ok(tx.cache.managed[uri].body === 'Hello, World!');
+            start();
+        }, LATENCY);
+    });
+});

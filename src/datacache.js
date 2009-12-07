@@ -13,6 +13,11 @@ function subclass(child, parent) {
     child.prototype.__proto__ = parent.prototype;
 }
 
+// Deep copy an object
+function deepCopy(obj) {
+    return JSON.parse(JSON.stringify(obj));
+}
+
 
 // -------------
 //   DataCache
@@ -47,12 +52,13 @@ DataCache.prototype = {
             group.status = DataCache.UPDATING;
         }
 
-        var newCache = group.create();
         if (offline) {
+            var newCache = group.create();
             var tx = new OfflineTransaction(newCache);
             this.queueCacheEvent('off-line-updating');
             return tx;
         } else {
+            var newCache = group.createLikeRelevant();
             var tx = new OnlineTransaction(newCache);
             this.queueCacheEvent('updating');
             return tx;
@@ -85,6 +91,10 @@ DataCache.prototype = {
     offlineTransaction: function(callback, errorCallback) {
         var tx = this._createCacheTransaction(this.group, true);
         this._handleTransaction(tx, callback, errorCallback);
+    },
+
+    transactionSync: function() {
+        return this._createCacheTransaction(this.group, false);
     },
 
     swapCache: function() {
@@ -196,6 +206,8 @@ CacheTransaction.prototype = {
     },
 
     parseHeaders: function(headersText) {
+        if (!headersText)
+            return {};
 
         // Remove leading whitespace
         function trimLeft(s) {
@@ -457,6 +469,13 @@ CacheEvent.prototype = {
             return cache;
         },
 
+        createLikeRelevant: function() {
+            var relevant = this.relevantCache;
+            var cache = this.create();
+            cache.managed = deepCopy(relevant.managed);
+            return cache;
+        },
+
         remove: function(cache) {
             if (cache.group !== this || this.versions[cache.version] !== cache)
                 return;
@@ -464,7 +483,16 @@ CacheEvent.prototype = {
             delete this.versions[cache.version];
             if (this._effectiveCache === cache)
                 this._effectiveCache = null; // NOTE: will become relevant cache
-        }
+        },
+
+        update: function(cache) {
+            var oldVersion = cache.version;
+            var newVersion = this._nextVersion;
+            cache.version = newVersion;
+            delete this.versions[oldVersion];
+            this.versions[newVersion] = cache;
+            this._nextVersion++;
+        },
     }
 
 
@@ -505,7 +533,8 @@ CacheEvent.prototype = {
             }
 
             var jsonString = JSON.stringify(savedObj);
-            window.localStorage[DataCacheGroupController.key] = jsonString;
+            // FIXME: reenable later one
+            // window.localStorage[DataCacheGroupController.key] = jsonString;
         },
 
         _createDataCache: function(group, origin, version, completeness) {

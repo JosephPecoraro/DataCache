@@ -275,22 +275,19 @@ OnlineTransaction.prototype = {
                     self._captureFailure(xhr);
             }
         }
-
         xhr.send();
+
+        var item = new CacheItem(CacheItem.FETCHING);
+        this.cache.manage(uri, item);
     },
 
     _captureSuccess: function(xhr, uri, methods) {
         console.log('success', xhr);
         var body = xhr.responseText; // FIXME: binary?
-        var type = xhr.getResponseHeader('Content-Type') || 'text/plain'; // FIXME: determine from filetype as well?
+        var type = xhr.getResponseHeader('Content-Type'); // FIXME: determine from filetype as well?
         var headers = this.parseHeaders(xhr.getAllResponseHeaders());
-
-        this.cache.manage(uri, {
-            methods: methods,
-            body: body,
-            type: type,
-            headers: headers
-        });
+        var item = new CacheItem(CacheItem.CACHED, body, type, methods, headers);
+        this.cache.manage(uri, item);
         this.cache.group.host.queueTask('captured');
     },
 
@@ -320,11 +317,8 @@ OfflineTransaction.prototype = {
     },
 
     _captureSubsteps: function(uri, methods, content, contentType) {
-        this.cache.manage(uri, {
-            methods: methods,
-            body: content,
-            type: (contentType || 'text/plain')
-        });
+        var item = new CacheItem(CacheItem.CACHED, content, contentType, methods);
+        this.cache.manage(uri, item);
         this.cache.group.host.queueTask('captured', this.cache, uri);
     }
 }
@@ -336,11 +330,12 @@ subclass(OfflineTransaction, CacheTransaction);
 //   CacheItem
 // -------------
 
-function CacheItem(readyState, body, dynamicMethods, headers) {
+function CacheItem(readyState, body, type, dynamicMethods, headers) {
     this.readyState = readyState;
     this.body = body;
+    this.type = (type || 'text/plain');
     this.dynamicMethods = dynamicMethods;
-    this.headers = headers;
+    this.headers = (headers || {});
 }
 
 CacheItem.UNCACHED = 0;
@@ -493,6 +488,39 @@ CacheEvent.prototype = {
             this.versions[newVersion] = cache;
             this._nextVersion++;
         },
+
+        eachModificationFromTo: function(highVersion, lowVersion, callback, successCallback) {
+            var additions = [];
+            var removals = [];
+
+            var currentCache = this.versions[highVersion];
+            // need to know what was added/removed (readyState)
+
+            var olderCache = this._nextLowerCache(highVersion);
+            while (olderCache) {
+                // need to know what was added/removed (readyState)
+                olderCache = this._nextLowerCache(olderCache.version);
+            }
+
+            if (callback) {
+                for (var i=0, len=additions.length; i<len; ++i)
+                    setTimeout(callback, 0, additions[i], 'addition');
+                for (var i=0, len=additions.length; i<len; ++i)
+                    setTimeout(callback, 0, additions[i], 'removal');
+            }
+
+            if (successCallback)
+                successCallback.call(this);
+        },
+
+        _nextLowerCache: function(version) {
+            for (var i=(version-1); i>0; --i) {
+                if (this.versions[i])
+                    return this.versions[i];
+            }
+
+            return null;
+        }
     }
 
 

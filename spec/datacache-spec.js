@@ -40,6 +40,10 @@ context('Resolving Absolute URLs', function() {
         ok(resolve(location, '../../../bar.txt') === '/bar.txt');
         ok(resolve(location, '/../../../bar.txt') === '/bar.txt');
 
+        // Strips the #hash fragment
+        ok(resolve(location, 'foo/../bar.txt#hash') === '/foo/bar.txt');
+        ok(resolve(location, 'http://example.com/foo/bar.txt#hash') === '/foo/bar.txt');
+
     });
 });
 
@@ -118,9 +122,9 @@ context('Offline Transaction', function() {
     should('trigger off-line-updating event', function() {
         stop();
         window.addEventListener('off-line-updating', function handler(c) {
+            window.removeEventListener('off-line-updating', handler, false);
             eventFlag = true;
             eventCache = c;
-            window.removeEventListener('off-line-updating', handler);
         }, false);
 
         var cache = window.openDataCache();
@@ -162,7 +166,6 @@ context('Offline Capture', function() {
 });
 
 
-
 context('Online Transaction', function() {
     var uri = 'data.txt';
     var asyncData = null;
@@ -189,6 +192,57 @@ context('Online Transaction', function() {
         tx.capture(uri);
         setTimeout(function() {
             ok(tx.cache.managed[uri].body === 'Hello, World!');
+            start();
+        }, LATENCY);
+    });
+});
+
+
+context('Online Transaction with 4xx or 5xx error', function() {
+    var uri = 'code.php?code=500';
+    var firedErrorEvent = false;
+
+    should('fire error event', function() {
+        stop();
+
+        window.addEventListener('error', function handler(c) {
+            window.removeEventListener('error', handler, false);
+            firedErrorEvent = true;
+        }, false);
+
+        var cache = window.openDataCache();
+        cache.transaction(function(tx) {
+            tx.capture(uri);
+        });
+
+        setTimeout(function() {
+            ok(firedErrorEvent, "did fire");
+            start();
+        }, LATENCY);
+    });
+});
+
+
+context('Online Transaction with 401', function() {
+    var uri = 'code.php?code=401';
+    var firedObsoleteEvent = false;
+    var cache = window.openDataCache();
+
+    should('make fire obsolete event and make obsolete', function() {
+        stop();
+
+        window.addEventListener('obsolete', function handler(c) {
+            window.removeEventListener('obsolete', handler, false);
+            firedObsoleteEvent = true;
+        }, false);
+
+        cache.transaction(function(tx) {
+            tx.capture(uri);
+        });
+
+        setTimeout(function() {
+            ok(firedObsoleteEvent, "did fire");
+            ok(cache.group.status === DataCache.OBSOLETE, "group became obsolete");
             start();
         }, LATENCY);
     });

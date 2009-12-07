@@ -139,15 +139,35 @@ CacheTransaction.prototype = {
         if (tx.status !== CacheTransaction.PENDING)
             throw "CacheTransaction: can only capture a PENDING transaction";
 
-        var baseURI = host.realHost.location.host; // NOTE: this is always the window
-        var absoluteURI = this._resolveAbsoluteFromBase(host.realHost.location, uri);
-
-        // TODO: Error checking on the URI
-        // FIXME: ^^
+        var location = host.realHost.location; // NOTE: realHost is always window
+        this._checkURI(location, uri);
+        var absoluteURI = this._resolveAbsoluteFromBase(location, uri);
 
         var cache = tx.cache;
         delete cache.managed[absoluteURI];
         this._captureSubsteps(uri, methods, content, contentType);
+    },
+
+    _checkURI: function(location, uri) {
+
+        // Remove scheme if it exists
+        function stripScheme(s) {
+            return (s.match(/^.*?:\/\//) ? s.substring(s.indexOf('://')+3) : s);
+        }
+
+        // Check scheme
+        var m = uri.match(/^(\w+):\/\//);
+        if (m && m[1] !== location.scheme)
+            throw "CacheTransaction: scheme change in attempted cache";
+
+        // Check host
+        if (m) {
+            uri = stripScheme(uri);
+            var host = uri.substring(0, uri.indexOf('/'));
+            if (host !== location.host)
+                throw "CacheTransaction: host change in attempted cache";
+        }
+
     },
 
     _resolveAbsoluteFromBase: function(location, uri) {
@@ -162,13 +182,24 @@ CacheTransaction.prototype = {
             return (s.indexOf(host) === 0 ? s.substring(host.length) : s);
         }
 
+        // Remove fragment if it exists
+        function stripFragment(s) {
+            var hashIndex = s.indexOf('#');
+            return (hashIndex !== -1 ? s.substring(0, hashIndex) : s);
+        }
+
+        // Combined
+        function stripComponents(s) {
+            return stripFragment(stripHost(stripScheme(s)));
+        }
+
         // on page: http://example.com/foo/bar.txt
         //   host       => example.com
         //   currentDir => example.com/foo/
         var host = location.host;
         var currentDir = location.href.substring(0, location.href.lastIndexOf('/')+1);
-        currentDir = stripHost(stripScheme(currentDir));
-        uri = stripHost(stripScheme(uri));
+        currentDir = stripComponents(currentDir);
+        uri = stripComponents(uri);
 
         //  The result may start with an absolute path from the root
         //  or a relative path from the current directory
@@ -293,6 +324,14 @@ OnlineTransaction.prototype = {
 
     _captureFailure: function(xhr) {
         console.log('failure', xhr);
+        this.cache.group.remove(this.cache);
+        this.status = CacheTransaction.ABORT;
+        if (xhr.status !== 401) {
+            this.cache.queueCacheEvent('error');
+        } else {
+            this.cache.group.status = DataCache.OBSOLETE;
+            this.cache.queueCacheEvent('obsolete');
+        }
     }
 }
 

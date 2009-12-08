@@ -66,7 +66,7 @@ DataCache.prototype = {
     },
 
     queueCacheEvent: function(type) {
-        this.group.host.queueTask(type, this);
+        this.group.host.queueTask(type, this, null);
     },
 
     _handleTransaction: function(transaction, callback, errorCallback) {
@@ -238,7 +238,7 @@ CacheTransaction.prototype = {
 
         var item = cache.getItem(absoluteURI); // will throw an error if not found
         cache.manage(absoluteURI, new CacheItem(CacheItem.GONE));
-        cache.group.host.queueTask('released');
+        cache.group.host.queueTask('released', cache, absoluteURI);
     },
 
     commit: function() {

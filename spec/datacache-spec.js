@@ -6,9 +6,11 @@ var LATENCY = 500;
 
 function basicEventChecker(type, object, flag, extra) {
     object[flag] = false;
-    window.addEventListener(type, function handler(c) {
+    object[flag+'Event'] = false;
+    window.addEventListener(type, function handler(event) {
         window.removeEventListener(type, handler, false);
         object[flag] = true;
+        object[flag+'Event'] = event;
         if (extra)
             extra();
     }, false);
@@ -134,14 +136,11 @@ context('DataCache', function() {
 
 
 context('Offline Transaction', function() {
-    var flags = {};
-    var eventCache = null;
-
     should('trigger off-line-updating event', function() {
         stop();
-        basicEventChecker('off-line-updating', flags, 'firedOfflineUpdating', function(c) {
-            eventCache = c;
-        });
+
+        var flags = {};
+        basicEventChecker('off-line-updating', flags, 'firedOfflineUpdating');
 
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
@@ -149,9 +148,9 @@ context('Offline Transaction', function() {
         });
 
         setTimeout(function() {
-            ok(flags.firedOfflineUpdating, "did fire");
             ok(flags.callbackFlag, "did fire");
-            ok(eventCache !== cache, "new cache");
+            ok(flags.firedOfflineUpdating, "did fire");
+            ok(!!flags.firedOfflineUpdatingEvent, "new cache"); // which cache should this be?
             start();
         }); // no latency needed, these are all queued setTimeout's
     });
@@ -171,6 +170,7 @@ context('Offline Capture', function() {
         var itemCallbackData = null;
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
+            ok(tx.offline);
             tx.capture(uri, body, 'text/plain', ['GET']);
             try { tx.getItem("DOESNOTEXIST", function() {}); }
             catch (e) { flags.exceptionNotFound = true; }
@@ -190,6 +190,8 @@ context('Offline Capture', function() {
 
         setTimeout(function() {
             ok(flags.firedCapturedEvent);
+            ok(!!flags.firedCapturedEventEvent.cache);
+            ok(!!flags.firedCapturedEventEvent.uri);
             ok(flags.exceptionNotFound);
             ok(flags.calledItemCallback);
             verify();
@@ -214,7 +216,11 @@ context('Offline Capture', function() {
 
         setTimeout(function() {
             ok(flags.firedCapturedEvent, 'did fire');
+            ok(!!flags.firedCapturedEventEvent.cache);
+            ok(!!flags.firedCapturedEventEvent.uri);
             ok(flags.firedReleasedEvent, 'did fire');
+            ok(!!flags.firedReleasedEventEvent.cache);
+            ok(!!flags.firedReleasedEventEvent.uri);
             ok(txCache.getItem(uri).readyState === CacheItem.GONE, 'no longer stored');
             start();
         });
@@ -237,6 +243,7 @@ context('Online Transaction', function() {
         var cache = window.openDataCache();
         var txCache = null;
         cache.transaction(function(tx) {
+            ok(!tx.offline);
             tx.capture(uri);
             try { tx.getItem("DOESNOTEXIST", function() {}); }
             catch (e) { flags.exceptionNotFound = true; }
@@ -249,7 +256,11 @@ context('Online Transaction', function() {
 
         setTimeout(function() {
             ok(flags.firedUpdatingEvent);
+            ok(!!flags.firedUpdatingEventEvent.cache);
+            ok(flags.firedUpdatingEventEvent.uri === null);
             ok(flags.firedFetchingEvent);
+            ok(!!flags.firedFetchingEventEvent.cache);
+            ok(!!flags.firedFetchingEventEvent.uri);
             ok(flags.exceptionNotFound);
             ok(flags.calledItemCallback);
             ok(itemCallbackState === CacheItem.FETCHING);
@@ -268,6 +279,7 @@ context('Online Transaction', function() {
         var itemCallbackState = null, itemCallbackData = null;
         var cache = window.openDataCache();
         var tx = cache.transactionSync();
+        ok(!tx.offline);
         tx.getItem(uri, function(item) { // carried over, now it exists
             flags.calledItemCallback = true;
             itemCallbackState = item.readyState;
@@ -277,11 +289,14 @@ context('Online Transaction', function() {
 
         setTimeout(function() {
             ok(flags.firedUpdatingEvent);
+            ok(!!flags.firedUpdatingEventEvent.cache);
+            ok(flags.firedUpdatingEventEvent.uri === null);
             ok(flags.firedFetchingEvent);
+            ok(!!flags.firedFetchingEventEvent.cache);
+            ok(!!flags.firedFetchingEventEvent.uri);
             ok(flags.calledItemCallback);
             ok(itemCallbackState === CacheItem.CACHED);
             ok(itemCallbackData === body);
-            ok(!tx.offline);
             var item = tx.cache.getItem(uri);
             ok(item.body === body);
             ok(item.readyState === CacheItem.CACHED);
@@ -415,6 +430,8 @@ context('Online Transaction with 401', function() {
 
         setTimeout(function() {
             ok(flags.firedObsoleteEvent, "did fire");
+            ok(!!flags.firedObsoleteEventEvent.cache);
+            ok(flags.firedObsoleteEventEvent.uri === null);
             ok(cache.group.status === DataCache.OBSOLETE, "group became obsolete");
             start();
         }, LATENCY);

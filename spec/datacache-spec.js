@@ -172,13 +172,13 @@ context('Offline Capture', function() {
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
             tx.capture(uri, body, 'text/plain', ['GET']);
-            tx.getItem(uri, itemCallback);
+            try { tx.getItem("DOESNOTEXIST", function() {}); }
+            catch (e) { flags.exceptionNotFound = true; }
+            tx.getItem(uri, function(item) {
+                flags.calledItemCallback = true;
+                itemCallbackData = item.body;
+            });
         });
-
-        function itemCallback(item) {
-            flags.calledItemCallback = true;
-            itemCallbackData = item.body;
-        }
 
         function verify() {
             cache.swapCache();
@@ -190,6 +190,7 @@ context('Offline Capture', function() {
 
         setTimeout(function() {
             ok(flags.firedCapturedEvent);
+            ok(flags.exceptionNotFound);
             ok(flags.calledItemCallback);
             verify();
             start();
@@ -237,6 +238,8 @@ context('Online Transaction', function() {
         var txCache = null;
         cache.transaction(function(tx) {
             tx.capture(uri);
+            try { tx.getItem("DOESNOTEXIST", function() {}); }
+            catch (e) { flags.exceptionNotFound = true; }
             tx.getItem(uri, function(item) {
                 flags.calledItemCallback = true;
                 itemCallbackState = item.readyState;
@@ -247,6 +250,7 @@ context('Online Transaction', function() {
         setTimeout(function() {
             ok(flags.firedUpdatingEvent);
             ok(flags.firedFetchingEvent);
+            ok(flags.exceptionNotFound);
             ok(flags.calledItemCallback);
             ok(itemCallbackState === CacheItem.FETCHING);
             ok(txCache.getItem(uri).body === body);

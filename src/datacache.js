@@ -262,7 +262,7 @@ CacheTransaction.prototype = {
             var self = this;
             setTimeout(function() {
                 self.oncommitted.call(self);
-            });
+            }, 0);
         }
     },
 

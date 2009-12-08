@@ -157,6 +157,10 @@ context('Offline Capture', function() {
 
     should('capture and manage a resource', function() {
         stop();
+
+        var flags = {};
+        basicEventChecker('captured', flags, 'firedCapturedEvent');
+
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
             tx.capture(uri, body, 'text/plain', ['GET']);
@@ -170,6 +174,7 @@ context('Offline Capture', function() {
         }
 
         setTimeout(function() {
+            ok(flags.firedCapturedEvent === true);
             verify();
             start();
         });
@@ -179,6 +184,10 @@ context('Offline Capture', function() {
         stop();
         var txCache = null;
 
+        var flags = {};
+        basicEventChecker('captured', flags, 'firedCapturedEvent');
+        basicEventChecker('released', flags, 'firedReleasedEvent');
+
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
             tx.capture(uri, body, 'text/plain', ['GET']);
@@ -187,6 +196,8 @@ context('Offline Capture', function() {
         });
 
         setTimeout(function() {
+            ok(flags.firedCapturedEvent, 'did fire');
+            ok(flags.firedReleasedEvent, 'did fire');
             ok(txCache.getItem(uri).readyState === CacheItem.GONE, 'no longer stored');
             start();
         });
@@ -228,12 +239,12 @@ context('Online Transaction', function() {
 
 context('Online Transaction with 4xx or 5xx error', function() {
     var uri = 'code.php?code=500';
-    var flags = {};
-
     should('fire error event', function() {
         stop();
 
+        var flags = {};
         basicEventChecker('error', flags, 'firedErrorEvent');
+
         var cache = window.openDataCache();
         cache.transaction(function(tx) {
             tx.capture(uri);
@@ -249,12 +260,14 @@ context('Online Transaction with 4xx or 5xx error', function() {
 
 context('Online Transaction with 401', function() {
     var uri = 'code.php?code=401';
-    var flags = {};
     var cache = window.openDataCache();
 
     should('make fire obsolete event and make obsolete', function() {
         stop();
+
+        var flags = {};
         basicEventChecker('obsolete', flags, 'firedObsoleteEvent');
+
         cache.transaction(function(tx) {
             tx.capture(uri);
         });

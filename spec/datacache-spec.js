@@ -207,6 +207,7 @@ context('Offline Capture', function() {
 
 context('Online Transaction', function() {
     var uri = 'data.txt';
+    var body = 'Hello, World!';
     var asyncData = null;
     var syncData = null;
 
@@ -219,7 +220,7 @@ context('Online Transaction', function() {
             txCache = tx.cache;
         });
         setTimeout(function() {
-            ok(txCache.getItem(uri).body === 'Hello, World!');
+            ok(txCache.getItem(uri).body === body);
             start();
         }, LATENCY);
     });
@@ -230,9 +231,34 @@ context('Online Transaction', function() {
         var tx = cache.transactionSync();
         tx.capture(uri);
         setTimeout(function() {
-            ok(tx.cache.getItem(uri).body === 'Hello, World!');
+            ok(tx.offline === false);
+            ok(tx.cache.getItem(uri).body === body);
+            ok(tx.cache.getItem(uri).readyState === CacheItem.CACHED);
             start();
         }, LATENCY);
+    });
+
+    should('have the same resources as the last online', function() {
+        var cache = window.openDataCache();
+        var tx = cache.transactionSync();
+        ok(tx.cache.getItem(uri).body === body);
+    });
+
+    should('release a resource', function() {
+        stop();
+
+        var flags = {};
+        basicEventChecker('released', flags, 'firedReleasedEvent');
+
+        var cache = window.openDataCache();
+        var tx = cache.transactionSync();
+        tx.release(uri);
+
+        setTimeout(function() {
+            ok(flags.firedReleasedEvent, 'did fire');
+            ok(tx.cache.getItem(uri).readyState === CacheItem.GONE);
+            start();
+        });
     });
 });
 

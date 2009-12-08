@@ -215,8 +215,6 @@ context('Offline Capture', function() {
 context('Online Transaction', function() {
     var uri = 'data.txt';
     var body = 'Hello, World!';
-    var asyncData = null;
-    var syncData = null;
 
     should('work asynchronously', function() {
         stop();
@@ -286,10 +284,10 @@ context('Online Transaction', function() {
 
     should('be aborted', function() {
        stop();
-       
+
        var flags = {};
        basicEventChecker('error', flags, 'firedErrorEvent');
-       
+
        var cache = window.openDataCache();
        var tx = cache.transactionSync();
        tx.abort();
@@ -299,6 +297,22 @@ context('Online Transaction', function() {
            ok(tx.status === CacheTransaction.ABORTED);
            start();
        });
+    });
+
+    should('trigger errorCallback', function() {
+        stop();
+
+        var calledErrorCallback = false;
+        var cache = window.openDataCache();
+        cache.transaction(
+            function() { THISWILLCAUSEANERROR; },
+            function() { calledErrorCallback = true; }
+        );
+
+        setTimeout(function() {
+            ok(calledErrorCallback, 'did fire errorCallback');
+            start();
+        }, LATENCY);
     });
 });
 

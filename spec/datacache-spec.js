@@ -314,6 +314,37 @@ context('Online Transaction', function() {
             start();
         }, LATENCY);
     });
+
+    should('trigger oncommitted after a commit (async)', function() {
+        stop();
+
+        var calledOncommitted = false;
+        var cache = window.openDataCache();
+        cache.transaction(function(tx) {
+            tx.oncommitted = function() { calledOncommitted = true; }
+            tx.commit();
+        });
+
+        setTimeout(function() {
+            ok(calledOncommitted, 'did fire oncommitted');
+            start();
+        }, LATENCY);
+    });
+
+    should('trigger oncommitted after a commit (sync)', function() {
+        stop();
+
+        var calledOncommitted = false;
+        var cache = window.openDataCache();
+        var tx = cache.transactionSync();
+        tx.oncommitted = function() { calledOncommitted = true; }
+        tx.commit();
+
+        setTimeout(function() {
+            ok(calledOncommitted, 'did fire oncommitted');
+            start();
+        }, LATENCY);
+    });
 });
 
 

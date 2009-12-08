@@ -258,6 +258,12 @@ CacheTransaction.prototype = {
             group.status = DataCache.IDLE;
         // FIXME: special queueTask?
 
+        if (this.oncommitted) {
+            var self = this;
+            setTimeout(function() {
+                self.oncommitted.call(self);
+            });
+        }
     },
 
     _capture: function(uri, host, tx, methods, content, contentType) {

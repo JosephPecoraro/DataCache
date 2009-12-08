@@ -223,6 +223,7 @@ context('Online Transaction', function() {
 
         var flags = {}
         basicEventChecker('updating', flags, 'firedUpdatingEvent');
+        basicEventChecker('fetching', flags, 'firedFetchingEvent');
 
         var cache = window.openDataCache();
         var txCache = null;
@@ -233,6 +234,7 @@ context('Online Transaction', function() {
 
         setTimeout(function() {
             ok(flags.firedUpdatingEvent);
+            ok(flags.firedFetchingEvent);
             ok(txCache.getItem(uri).body === body);
             start();
         }, LATENCY);
@@ -243,6 +245,7 @@ context('Online Transaction', function() {
 
         var flags = {}
         basicEventChecker('updating', flags, 'firedUpdatingEvent');
+        basicEventChecker('fetching', flags, 'firedFetchingEvent');
 
         var cache = window.openDataCache();
         var tx = cache.transactionSync();
@@ -250,6 +253,7 @@ context('Online Transaction', function() {
 
         setTimeout(function() {
             ok(flags.firedUpdatingEvent);
+            ok(flags.firedFetchingEvent);
             ok(!tx.offline);
             ok(tx.cache.getItem(uri).body === body);
             ok(tx.cache.getItem(uri).readyState === CacheItem.CACHED);

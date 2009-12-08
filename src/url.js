@@ -21,7 +21,7 @@ URL.parse = function(url) {
     //                   scheme        authority  port          path        query      fragment
     //             ------------------  -------- ---------     ---------  ------------  --------
     //            /                  \/       \/         \   /         \/            \/        \
-    var regex = /^(?:(\w+):(?:\/\/)?)?([^\/:]+)(?::(\d+))?(?:(\/[^\?#]*)(?:\?([^#]*))?(?:#(.*))?)?$/;
+    var regex = /^(?:(\w+):(?:\/\/)?)?([^\/:?#]+)(?::(\d+))?(?:(\/[^?#]*)(?:\?([^#]*))?(?:#(.*))?)?$/;
 
     // Available in ES5, but not previous implementations
     if (!String.prototype.trim) {

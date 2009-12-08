@@ -98,7 +98,59 @@ context('Parsing Headers', function() {
 });
 
 
-// Testing private code
+context('MutableHttpResponse setters', function() {
+    var code = 200;
+    var message = '200 OK';
+    var body = 'Hello World!';
+    var headers = {
+        'Date': 'Sun, 06 Dec 2009 05:19:04 GMT',
+        'Content-Type': 'text/plain',
+        'Content-Encoding': 'gzip'
+    };
+
+    function copy(o) {
+        return JSON.parse(JSON.stringify(o));
+    }
+
+    should('work as expected', function() {
+        var resp = new MutableHttpResponse(code, message, body, copy(headers));
+        var newCode = 200;
+        var newMessage = '200 OK';
+        var newBody = 'sample data';
+
+        resp.setStatus(newCode, newMessage);
+        resp.setResponseText(newBody);
+        resp.setResponseHeader('X-New-Header', 'test');      // should create
+        resp.setResponseHeader('Content-Type', 'text/html'); // should append
+
+        ok(resp.statusCode === newCode);
+        ok(resp.statusMessage === newMessage);
+        ok(resp.bodyText === newBody);
+        ok(resp.headers['X-New-Header'] === 'test');
+        ok(resp.headers['Content-Type'] === 'text/plain; text/html');
+    });
+
+    should('not be mutable after dispatch', function() {
+        var resp = new MutableHttpResponse(code, message, body, copy(headers));
+        var newCode = 200;
+        var newMessage = '200 OK';
+        var newBody = 'sample data';
+
+        resp.send();
+        resp.setStatus(newCode, newMessage);
+        resp.setResponseText(newBody);
+        resp.setResponseHeader('X-New-Header', 'test');      // should create
+        resp.setResponseHeader('Content-Type', 'text/html'); // should append
+
+        ok(resp.statusCode === code);
+        ok(resp.statusMessage === message);
+        ok(resp.bodyText === body);
+        ok(resp.headers['X-New-Header'] === undefined);
+        ok(resp.headers['Content-Type'] === 'text/plain');
+    });
+});
+
+
 context('DataCacheGroup/Host', function() {
     var cache = window.openDataCache();
     var version = cache.version;

@@ -450,6 +450,126 @@ CacheItem.CACHED = 2;
 CacheItem.GONE = 3;
 
 
+// -------------------------
+//   Embedded Local Server
+// -------------------------
+
+function LocalServer(namespace, interceptFunc, reviewerFunc) {
+    this.namespace = namespace;
+    this.interceptor = interceptFunc;
+    this.reviewer = reviewerFunc;
+}
+
+
+// ---------------------
+//   Interceptor Parts
+// ---------------------
+
+function HttpRequest(method, target, bodyText, headers) {
+    this.methods = methods;
+    this.target = target;
+    this.bodyText = bodyText;
+    this.headers = headers;
+}
+
+function HttpResponse(statusCode, statusMessage, bodyText, headers) {
+    this.statusCode = statusCode;
+    this.statusMessage = statusMessage;
+    this.bodyText = bodyText;
+    this.headers = headers;
+}
+
+
+// ---------------------
+//   Mutable Response
+// ---------------------
+
+function MutableHttpResponse(statusCode, statusMessage, bodyText, headers) {
+    HttpResponse.call(this, statusCode, statusMessage, bodyText, headers);
+    this._dispatched = false;
+}
+
+MutableHttpResponse.prototype = {
+    setStatus: function(code, message) {
+        if (this._dispatched)
+            return;
+        this.statusCode = code;
+        this.statusMessage = message;
+    },
+
+    setResponseText: function(text) {
+        if (this._dispatched)
+            return;
+        this.bodyText = text;
+    },
+
+    setResponseHeader: function(name, value) {
+        if (this._dispatched)
+            return;
+        if (name in this.headers)
+            this.headers[name] += '; ' + value;
+        else
+            this.headers[name] = value;
+    },
+
+    send: function() {
+        if (this._dispatched)
+            return;
+        this._dispatched = true;
+
+        // FIXME: Dispatch
+        //throw "unimplemented";
+    }
+};
+
+
+// ----------------
+//   Http Globals
+// ----------------
+
+var Http = {};
+
+Http.Status = {
+  100: 'Continue',
+  101: 'Switching Protocols',
+  200: 'OK',
+  201: 'Created',
+  202: 'Accepted',
+  203: 'Non-Authoritative Information',
+  204: 'No Content',
+  205: 'Reset Content',
+  206: 'Partial Content',
+  300: 'Multiple Choices',
+  301: 'Moved Permanently',
+  302: 'Moved Temporarily',
+  303: 'See Other',
+  304: 'Not Modified',
+  305: 'Use Proxy',
+  400: 'Bad Request',
+  401: 'Unauthorized',
+  402: 'Payment Required',
+  403: 'Forbidden',
+  404: 'Not Found',
+  405: 'Method Not Allowed',
+  406: 'Not Acceptable',
+  407: 'Proxy Authentication Required',
+  408: 'Request Time-out',
+  409: 'Conflict',
+  410: 'Gone',
+  411: 'Length Required',
+  412: 'Precondition Failed',
+  413: 'Request Entity Too Large',
+  414: 'Request-URI Too Large',
+  415: 'Unsupported Media Type',
+  500: 'Internal Server Error',
+  501: 'Not Implemented',
+  502: 'Bad Gateway',
+  503: 'Service Unavailable',
+  504: 'Gateway Time-out',
+  505: 'HTTP Version not supported'
+};
+
+
 // -----------------------
 //   CacheEvent (unused)
 // -----------------------
@@ -503,6 +623,7 @@ CacheEvent.prototype = {
 
     function DataCacheHost(realHost) {
         this.realHost = realHost; // always window for this library
+        this.servers = [];
     }
 
     DataCacheHost.prototype = {
@@ -511,6 +632,10 @@ CacheEvent.prototype = {
             event.initEvent(type, false, false);
             event.initCacheEvent(cache, uri);
             this.realHost.dispatchEvent(event);
+        },
+
+        addLocalServer: function(server) {
+            this.servers.push(server);
         }
     }
 
@@ -655,7 +780,8 @@ CacheEvent.prototype = {
         },
 
         save: function(group) {
-            // TODO: Handle managed resources
+            // TODO: Handle local servers in CacheHost (they are functions...)
+            // TODO: Handle managed resources in DataCache
             var savedObj = { _nextVersion: group._nextVersion, v: {} };
             for (var i in group.versions) {
                 var version = group.versions[i];
@@ -714,6 +840,10 @@ CacheEvent.prototype = {
         return group.effectiveCache;
     }
 
+    navigator.registerOfflineHandler = function registerOfflineHandler(namespace, intercept, review) {
+        host.addServer(new LocalServer(namespace, intercept, review));
+    }
+
 })();
 
 
@@ -759,6 +889,11 @@ function InterceptableXMLHttpRequest() {
 InterceptableXMLHttpRequest.prototype = {
     open: function() {
         this.xhr.open.apply(this.xhr, arguments);
+    },
+
+    send: function() {
+        // TODO: add 'send' to the exceptions list above
+        // 4.3.2. Changes to the networking model
     }
 }
 

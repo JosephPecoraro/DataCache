@@ -260,6 +260,23 @@ context('Online Transaction', function() {
             start();
         });
     });
+
+    should('be aborted', function() {
+       stop();
+       
+       var flags = {};
+       basicEventChecker('error', flags, 'firedErrorEvent');
+       
+       var cache = window.openDataCache();
+       var tx = cache.transactionSync();
+       tx.abort();
+
+       setTimeout(function() {
+           ok(flags.firedErrorEvent, 'did fire');
+           ok(tx.status === CacheTransaction.ABORTED);
+           start();
+       });
+    });
 });
 
 

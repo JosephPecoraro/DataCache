@@ -347,7 +347,7 @@ OnlineTransaction.prototype = {
         if (this.status !== CacheTransaction.PENDING)
             throw 'CacheTransaction: cannot abort a non-PENDING transaction';
         this.cache.group.remove(this.cache);
-        this.status = CacheTransaction.ABORT;
+        this.status = CacheTransaction.ABORTED;
         this.cache.queueCacheEvent('error');
     },
 

@@ -236,8 +236,8 @@ CacheTransaction.prototype = {
         this._checkURI(location, uri);
         var absoluteURI = DataCache.resolveAbsoluteFromBase(location, uri);
 
-        var item = cache.getItem(absoluteURI);
-        item.readyState = CacheItem.GONE;
+        var item = cache.getItem(absoluteURI); // will throw an error if not found
+        cache.manage(absoluteURI, new CacheItem(CacheItem.GONE));
         cache.group.host.queueTask('released');
     },
 

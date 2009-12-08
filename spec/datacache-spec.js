@@ -100,23 +100,25 @@ context('Parsing Headers', function() {
 
 context('MutableHttpResponse setters', function() {
     var code = 200;
-    var message = '200 OK';
+    var message = Http[code];
     var body = 'Hello World!';
+
+    var newCode = 410;
+    var newMessage = Http[code];
+    var newBody = 'sample data';
+
     var headers = {
         'Date': 'Sun, 06 Dec 2009 05:19:04 GMT',
         'Content-Type': 'text/plain',
         'Content-Encoding': 'gzip'
     };
 
-    function copy(o) {
+    function deepCopy(o) {
         return JSON.parse(JSON.stringify(o));
     }
 
     should('work as expected', function() {
-        var resp = new MutableHttpResponse(code, message, body, copy(headers));
-        var newCode = 200;
-        var newMessage = '200 OK';
-        var newBody = 'sample data';
+        var resp = new MutableHttpResponse(code, message, body, deepCopy(headers));
 
         resp.setStatus(newCode, newMessage);
         resp.setResponseText(newBody);
@@ -131,10 +133,7 @@ context('MutableHttpResponse setters', function() {
     });
 
     should('not be mutable after dispatch', function() {
-        var resp = new MutableHttpResponse(code, message, body, copy(headers));
-        var newCode = 200;
-        var newMessage = '200 OK';
-        var newBody = 'sample data';
+        var resp = new MutableHttpResponse(code, message, body, deepCopy(headers));
 
         resp.send();
         resp.setStatus(newCode, newMessage);

@@ -1,3 +1,7 @@
+// -----------
+//   Globals
+// -----------
+
 var LATENCY = 500;
 
 function basicEventChecker(type, object, flag, extra) {
@@ -10,6 +14,10 @@ function basicEventChecker(type, object, flag, extra) {
     }, false);
 }
 
+
+// --------------
+//   Test Suite
+// --------------
 
 context('Basics', function() {
     should('have public methods', function() {
@@ -128,7 +136,6 @@ context('DataCache', function() {
 context('Offline Transaction', function() {
     var flags = {};
     var eventCache = null;
-    var callbackFlag = false;
 
     should('trigger off-line-updating event', function() {
         stop();
@@ -174,7 +181,7 @@ context('Offline Capture', function() {
         }
 
         setTimeout(function() {
-            ok(flags.firedCapturedEvent === true);
+            ok(flags.firedCapturedEvent);
             verify();
             start();
         });
@@ -213,13 +220,19 @@ context('Online Transaction', function() {
 
     should('work asynchronously', function() {
         stop();
+
+        var flags = {}
+        basicEventChecker('updating', flags, 'firedUpdatingEvent');
+
         var cache = window.openDataCache();
         var txCache = null;
         cache.transaction(function(tx) {
             tx.capture(uri);
             txCache = tx.cache;
         });
+
         setTimeout(function() {
+            ok(flags.firedUpdatingEvent);
             ok(txCache.getItem(uri).body === body);
             start();
         }, LATENCY);
@@ -227,11 +240,17 @@ context('Online Transaction', function() {
 
     should('work synchronously', function() {
         stop();
+
+        var flags = {}
+        basicEventChecker('updating', flags, 'firedUpdatingEvent');
+
         var cache = window.openDataCache();
         var tx = cache.transactionSync();
         tx.capture(uri);
+
         setTimeout(function() {
-            ok(tx.offline === false);
+            ok(flags.firedUpdatingEvent);
+            ok(!tx.offline);
             ok(tx.cache.getItem(uri).body === body);
             ok(tx.cache.getItem(uri).readyState === CacheItem.CACHED);
             start();

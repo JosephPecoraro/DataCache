@@ -162,29 +162,38 @@ context('Offline Capture', function() {
     var body = 'Hello, World!';
     var uri = 'blah.html';
 
-    should('capture and manage a resource', function() {
+    should('capture, manage, and getItem a resource', function() {
         stop();
 
         var flags = {};
         basicEventChecker('captured', flags, 'firedCapturedEvent');
 
+        var itemCallbackData = null;
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
             tx.capture(uri, body, 'text/plain', ['GET']);
+            tx.getItem(uri, itemCallback);
         });
+
+        function itemCallback(item) {
+            flags.calledItemCallback = true;
+            itemCallbackData = item.body;
+        }
 
         function verify() {
             cache.swapCache();
             var item = window.openDataCache().getItem(uri);
             ok(item.body === body, "proper data");
             ok(item.readyState === CacheItem.CACHED);
+            ok(item.body === itemCallbackData);
         }
 
         setTimeout(function() {
             ok(flags.firedCapturedEvent);
+            ok(flags.calledItemCallback);
             verify();
             start();
-        });
+        }, LATENCY);
     });
 
     should('capture and release a resource', function() {
@@ -223,16 +232,23 @@ context('Online Transaction', function() {
         basicEventChecker('updating', flags, 'firedUpdatingEvent');
         basicEventChecker('fetching', flags, 'firedFetchingEvent');
 
+        var itemCallbackState = null;
         var cache = window.openDataCache();
         var txCache = null;
         cache.transaction(function(tx) {
             tx.capture(uri);
+            tx.getItem(uri, function(item) {
+                flags.calledItemCallback = true;
+                itemCallbackState = item.readyState;
+            });
             txCache = tx.cache;
         });
 
         setTimeout(function() {
             ok(flags.firedUpdatingEvent);
             ok(flags.firedFetchingEvent);
+            ok(flags.calledItemCallback);
+            ok(itemCallbackState === CacheItem.FETCHING);
             ok(txCache.getItem(uri).body === body);
             start();
         }, LATENCY);
@@ -245,16 +261,26 @@ context('Online Transaction', function() {
         basicEventChecker('updating', flags, 'firedUpdatingEvent');
         basicEventChecker('fetching', flags, 'firedFetchingEvent');
 
+        var itemCallbackState = null, itemCallbackData = null;
         var cache = window.openDataCache();
         var tx = cache.transactionSync();
+        tx.getItem(uri, function(item) { // carried over, now it exists
+            flags.calledItemCallback = true;
+            itemCallbackState = item.readyState;
+            itemCallbackData = item.body;
+        });
         tx.capture(uri);
 
         setTimeout(function() {
             ok(flags.firedUpdatingEvent);
             ok(flags.firedFetchingEvent);
+            ok(flags.calledItemCallback);
+            ok(itemCallbackState === CacheItem.CACHED);
+            ok(itemCallbackData === body);
             ok(!tx.offline);
-            ok(tx.cache.getItem(uri).body === body);
-            ok(tx.cache.getItem(uri).readyState === CacheItem.CACHED);
+            var item = tx.cache.getItem(uri);
+            ok(item.body === body);
+            ok(item.readyState === CacheItem.CACHED);
             start();
         }, LATENCY);
     });

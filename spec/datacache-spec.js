@@ -457,7 +457,6 @@ context('Local Server', function() {
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
             tx.capture(uri, body, null, [method]);
-            cache.swapCache(); // bad practice
         });
 
         var interceptorCalled = false;

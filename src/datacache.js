@@ -53,8 +53,7 @@ DataCache.prototype = {
         }
 
         if (offline) {
-            var newCache = group.create();
-            var tx = new OfflineTransaction(newCache);
+            var tx = new OfflineTransaction(this);
             this.queueCacheEvent('off-line-updating');
             return tx;
         } else {

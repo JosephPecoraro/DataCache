@@ -37,10 +37,8 @@ context('Offline Capture a Resource', function() {
         }, false);
 
         // Event to fire on capture
-        // Make the offline cache the effective cache
         window.addEventListener('captured', function(event) {
             addToOrder(2, 'captured listener');
-            event.cache.swapCache();
         }, false);
 
         // Offline Capture a Resource
@@ -69,9 +67,8 @@ context('Offline Capture a Resource', function() {
 
         // End the test
         setTimeout(function() {
-            var effective = window.openDataCache();
-            ok(cache !== effective);
-            ok(effective.getItem(uri).body === body);
+            ok(cache === window.openDataCache());
+            ok(cache.getItem(uri).body === body);
             ok(checkOrder());
             start();
         }, 0);

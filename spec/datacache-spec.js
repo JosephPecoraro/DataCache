@@ -126,7 +126,7 @@ context('MutableHttpResponse setters', function() {
         resp.setResponseHeader('Content-Type', 'text/html'); // should append
 
         ok(resp.statusCode === newCode);
-        ok(resp.statusMessage === newMessage);
+        ok(resp.statusMessage === 'HTTP/1.1 ' + newMessage); // note HTTP was added in the Response
         ok(resp.bodyText === newBody);
         ok(resp.headers['X-New-Header'] === 'test');
         ok(resp.headers['Content-Type'] === 'text/plain, text/html');
@@ -142,10 +142,17 @@ context('MutableHttpResponse setters', function() {
         resp.setResponseHeader('Content-Type', 'text/html'); // should append
 
         ok(resp.statusCode === code);
-        ok(resp.statusMessage === message);
+        ok(resp.statusMessage === 'HTTP/1.1 ' + message);    // note HTTP was added in the Response
         ok(resp.bodyText === body);
         ok(resp.headers['X-New-Header'] === undefined);
         ok(resp.headers['Content-Type'] === 'text/plain');
+    });
+
+    should('not double add HTTP to status', function() {
+        var message = 'HTTP/1.1 TEST';
+        var resp = new MutableHttpResponse(code, message, body, {});
+        resp.send();
+        ok(resp.statusMessage.length === message.length);
     });
 });
 

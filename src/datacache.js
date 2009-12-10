@@ -487,9 +487,13 @@ function HttpRequest(method, target, bodyText, headers) {
 
 function HttpResponse(statusCode, statusMessage, bodyText, headers) {
     this.statusCode = statusCode;
-    this.statusMessage = statusMessage;
+    this.statusMessage = HttpResponse.sanitizeMessage(statusMessage);
     this.bodyText = bodyText;
     this.headers = headers;
+}
+
+HttpResponse.sanitizeMessage = function(message) {
+    return (message.indexOf('HTTP') !== 0 ? 'HTTP/1.1 ' + message : message);
 }
 
 
@@ -507,7 +511,7 @@ MutableHttpResponse.prototype = {
         if (this._dispatched)
             return;
         this.statusCode = code;
-        this.statusMessage = message;
+        this.statusMessage = HttpResponse.sanitizeMessage(message);
     },
 
     setResponseText: function(text) {
@@ -1018,8 +1022,13 @@ InterceptableXMLHttpRequest.prototype = {
         this._handled = true;
         this._headers = response.headers;
 
+        var sanitizedStatusText = response.statusMessage;
+        var match = sanitizedStatusText.match(/^HTTP.*?\s+/);
+        if (match)
+            sanitizedStatusText = sanitizedStatusText.substring(match[0].length);
+
         this.status = response.statusCode;
-        this.statusText = response.statusMessage;
+        this.statusText = sanitizedStatusText;
         this.readyState = 4; // success
         this.responseText = response.bodyText;
         this.onreadystatechange(null);

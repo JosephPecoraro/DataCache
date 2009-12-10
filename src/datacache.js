@@ -461,17 +461,17 @@ CacheItem.GONE = 3;
 // -------------------------
 
 function LocalServer(namespace, interceptFunc, reviewerFunc) {
-    this.namespace = DataCache.resolveAbsoluteFromBase(namespace);
+    this.namespace = DataCache.resolveAbsoluteFromBase(window.location, namespace);
     this.interceptor = interceptFunc;
     this.reviewer = reviewerFunc;
 }
 
 LocalServer.prototype = {
-    specificityForUri: function(resolvedUri) {
+    specificityForURI: function(resolvedURI) {
         // Example:
         //   local server namespace: /foo
         //   requested uri:          /foo/bar.txt
-        return (resolvedUri.indexOf(this.namespace) === 0 ? this.namespace.length : 0);
+        return (resolvedURI.indexOf(this.namespace) === 0 ? this.namespace.length : 0);
     }
 };
 
@@ -481,7 +481,7 @@ LocalServer.prototype = {
 // ---------------------
 
 function HttpRequest(method, target, bodyText, headers) {
-    this.methods = methods;
+    this.method = method;
     this.target = target;
     this.bodyText = bodyText;
     this.headers = headers;
@@ -681,12 +681,12 @@ CacheEvent.prototype = {
                 return new HttpResponse(200, Http.Status[200], item.body, item.headers);
 
             // Find Specific Candidate Server
+            var resolvedURI = DataCache.resolveAbsoluteFromBase(window.location, uri);
             var server = this._candidateServerForUri(resolvedURI);
             if (!server)
                 throw "DataCache: missing local server to create a dynamic request";
 
             // Create the Request
-            var resolvedURI = DataCache.resolveAbsoluteFromBase(window.location, uri);
             var request = new HttpRequest(method, resolvedURI, data, headers);
 
             // Offline => Mutable Response for the interceptor
@@ -712,7 +712,7 @@ CacheEvent.prototype = {
             var maxLength = -1;
             var candidate = null;
             for (var i=0, len=this.servers.length; i<len; ++i) {
-                var specificity = this.servers[i].specificityForUri(resolvedURI);
+                var specificity = this.servers[i].specificityForURI(resolvedURI);
                 if (specificity > 0 && specificity > maxLength)
                     candidate = this.servers[i];
             }
@@ -933,9 +933,8 @@ CacheEvent.prototype = {
 })();
 
 
-
-
 /*
+ * FIXME: Possible Solution
  * Overwrite Default XMLHttpRequest behavior through
  * monkey patching, to sneak information?
  */

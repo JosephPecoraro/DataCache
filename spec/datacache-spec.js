@@ -444,6 +444,70 @@ context('Online Transaction', function() {
 });
 
 
+context('Local Server', function() {
+    var uri = 'blah.txt';
+    var body = 'none';
+    var method = 'GET';
+
+    should('return dynamic intercepted representations', function() {
+        stop();
+
+        DataCache.Offline = true;
+
+        var cache = window.openDataCache();
+        cache.offlineTransaction(function(tx) {
+            tx.capture(uri, body, null, [method]);
+            cache.swapCache(); // bad practice
+        });
+
+        var interceptorCalled = false;
+        var reviewerCalled = false;
+        var body = 'hello';
+
+        function verify() {
+            ok(xhr.status === 200);
+            ok(xhr.statusText === Http.Status[200]);
+            ok(xhr.responseText === body);
+        }
+
+        function interceptor(request, response) {
+            interceptorCalled = true;
+            ok(request.method === method);
+
+            response.setStatus(200, Http.Status[200]);
+            response.setResponseText(body);
+            response.setResponseHeader('X-Test', 'Test'); // FIXME: Check for this!
+            response.send();
+        }
+
+        function reviewer() {
+            reviewerCalled = true;
+        }
+
+        navigator.registerOfflineHandler(uri, interceptor, reviewer);
+
+        var xhr = new InterceptableXMLHttpRequest();
+        xhr.open(method, uri);
+        xhr.onreadystatechange = verify;
+        xhr.send();
+
+        setTimeout(function() {
+            ok(interceptorCalled);
+            ok(!reviewerCalled);
+            start();
+        });
+    });
+
+    should('return dynamic reviewed representations', function() {
+        stop();
+        // FIXME: Implement test!
+        setTimeout(function() {
+            start();
+        });
+    });
+});
+
+
 context('Online Transaction with 4xx or 5xx error', function() {
     var uri = 'code.php?code=500';
     should('fire error event', function() {

@@ -5,8 +5,9 @@ Working Draft in a cross browser compatible JavaScript layer.
 
 Planned Supported Browsers:
 
-  - Safari
-  - Firefox
+  - Safari (4.0.3+)
+  - Firefox (3.5+)
+  - Chrome (4+)
 
 This project is Free and Open Source. Please expand, fork, suggest merges,
 and provide feedback or advice.

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DataCache Use Case 2</title>
+
+    <!-- Testing Libraries -->
+    <link rel="stylesheet" href="shoulda.css" type="text/css" media="screen" title="no title" charset="utf-8">
+    <script src="qunit.js" type="text/javascript" charset="utf-8"></script>
+    <script src="shoulda.js" type="text/javascript" charset="utf-8"></script>
+    <script src="use-case-helpers.js" type="text/javascript" charset="utf-8"></script>
+
+    <!-- The DataCache API -->
+    <script src="../src/datacache.js" type="text/javascript" charset="utf-8"></script>
+</head>
+<body>
+    <h2 id="qunit-banner">DataCache Use Case 2 [online]</h2>
+    <h2 id="qunit-userAgent"></h2>
+    <ol id="qunit-tests"></ol>
+
+<!-- Test Case -->
+<script type="text/javascript" charset="utf-8">
+context('Non Captured Resource', function() {
+    should('work as expected', function() {
+        stop();
+        expect(5);
+
+        // Setup as Offline (should not matter)
+        DataCache.Offline = true;
+
+        // Values
+        var uriToCapture = 'foo.json';
+        var body = '[0,1,2]';
+
+        // Event to fire before transaction begins
+        window.addEventListener('off-line-updating', function(event) {
+            addToOrder(0, 'off-line-updating listener');
+        }, false);
+
+        // Event to fire on capture
+        // Make the offline cache the effective cache
+        window.addEventListener('captured', function(event) {
+            addToOrder(2, 'captured listener');
+            event.cache.swapCache();
+        }, false);
+
+        // Offline Capture a Resource
+        var cache = window.openDataCache();
+        cache.offlineTransaction(function(tx) {
+            addToOrder(1, 'transaction');
+            tx.capture(uriToCapture, body, 'text/plain', []);
+        });
+
+        // Verification of Data Returned from Cache
+        function verify() {
+            if (xhr.readyState !== 4)
+                return;
+
+            addToOrder(3, 'onreadystate', xhr);
+            ok(xhr.status === 200 || xhr.status === 0);
+            ok(xhr.responseText === dataFileText);
+        }
+
+        // Response with that Resource Automatically, without going to the wire
+        var xhr = new InterceptableXMLHttpRequest();
+        xhr.open('GET', dataFileURI);
+        xhr.onreadystatechange = verify;
+        xhr.send();
+
+        // End the test
+        setTimeout(function() {
+            var effective = window.openDataCache();
+            ok(cache !== effective);
+            ok(effective.getItem(uriToCapture).body === body);
+            ok(checkOrder());
+            start();
+        }, LATENCY);
+    });
+});
+</script>
+
+</body>
+</html>

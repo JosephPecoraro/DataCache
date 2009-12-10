@@ -100,11 +100,11 @@ context('Parsing Headers', function() {
 
 context('MutableHttpResponse setters', function() {
     var code = 200;
-    var message = Http[code];
+    var message = Http.Status[code];
     var body = 'Hello World!';
 
     var newCode = 410;
-    var newMessage = Http[code];
+    var newMessage = Http.Status[code];
     var newBody = 'sample data';
 
     var headers = {
@@ -129,7 +129,7 @@ context('MutableHttpResponse setters', function() {
         ok(resp.statusMessage === newMessage);
         ok(resp.bodyText === newBody);
         ok(resp.headers['X-New-Header'] === 'test');
-        ok(resp.headers['Content-Type'] === 'text/plain; text/html');
+        ok(resp.headers['Content-Type'] === 'text/plain, text/html');
     });
 
     should('not be mutable after dispatch', function() {

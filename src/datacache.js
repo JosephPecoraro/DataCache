@@ -136,9 +136,15 @@ DataCache.prototype = {
 }
 
 
-// --------------------
-//   Global Functions
-// --------------------
+// -------------------------------
+//   Global Functions and Values
+// -------------------------------
+
+DataCache.GlobalHost = null; // set later
+DataCache.Offline = false;   // set as determined
+
+// TODO: make an XHR request for the current page to determine offline status
+// also, store data in sessionStorage (and timestamp) to carry such data along.
 
 DataCache.resolveAbsoluteFromBase = function(location, uri) {
 
@@ -440,7 +446,7 @@ function CacheItem(readyState, body, type, dynamicMethods, headers) {
     this.readyState = readyState;
     this.body = body;
     this.type = (type || 'text/plain');
-    this.dynamicMethods = dynamicMethods;
+    this.dynamicMethods = dynamicMethods || [];
     this.headers = (headers || {});
 }
 
@@ -455,10 +461,19 @@ CacheItem.GONE = 3;
 // -------------------------
 
 function LocalServer(namespace, interceptFunc, reviewerFunc) {
-    this.namespace = namespace;
+    this.namespace = DataCache.resolveAbsoluteFromBase(namespace);
     this.interceptor = interceptFunc;
     this.reviewer = reviewerFunc;
 }
+
+LocalServer.prototype = {
+    specificityForUri: function(resolvedUri) {
+        // Example:
+        //   local server namespace: /foo
+        //   requested uri:          /foo/bar.txt
+        return (resolvedUri.indexOf(this.namespace) === 0 ? this.namespace.length : 0);
+    }
+};
 
 
 // ---------------------
@@ -506,19 +521,20 @@ MutableHttpResponse.prototype = {
     setResponseHeader: function(name, value) {
         if (this._dispatched)
             return;
-        if (name in this.headers)
-            this.headers[name] += '; ' + value;
-        else
+        if (name in this.headers) {
+            // Append to the Http Header
+            // The append character is a comma, whitespace
+            // is ignored after the comma.
+            this.headers[name] += ', ' + value;
+        } else {
             this.headers[name] = value;
+        }
     },
 
     send: function() {
         if (this._dispatched)
             return;
         this._dispatched = true;
-
-        // FIXME: Dispatch
-        //throw "unimplemented";
     }
 };
 
@@ -624,6 +640,7 @@ CacheEvent.prototype = {
     function DataCacheHost(realHost) {
         this.realHost = realHost; // always window for this library
         this.servers = [];
+        this.groups = [];
     }
 
     DataCacheHost.prototype = {
@@ -634,9 +651,74 @@ CacheEvent.prototype = {
             this.realHost.dispatchEvent(event);
         },
 
+        addGroup: function(group) {
+            this.groups.push(group);
+        },
+
         addLocalServer: function(server) {
             this.servers.push(server);
-        }
+        },
+
+        handleRequest: function(xhr, method, uri, data, headers) {
+
+            // Immediate return if a bypass header is set
+            if (headers['X-Bypass-DataCache'] === 'true')
+                return false;
+
+            // NOTE: known to be only one group, may change in the future
+            var item = null;
+            var cache = this.groups[0].effectiveCache; // I FEEL THIS IS NOT ENOUGH... Online+Offline checks?
+            try { item = cache.getItem(uri); } catch (e) {}
+            if (!item)
+                return false;
+
+            // Captured but not yet ready
+            if (item.readyState !== CacheItem.CACHED)
+                return false;
+
+            // Non Dynamic Request, pull from cache, represent as a response
+            if (item.dynamicMethods.indexOf(method) === -1)
+                return new HttpResponse(200, Http.Status[200], item.body, item.headers);
+
+            // Find Specific Candidate Server
+            var server = this._candidateServerForUri(resolvedURI);
+            if (!server)
+                throw "DataCache: missing local server to create a dynamic request";
+
+            // Create the Request
+            var resolvedURI = DataCache.resolveAbsoluteFromBase(window.location, uri);
+            var request = new HttpRequest(method, resolvedURI, data, headers);
+
+            // Offline => Mutable Response for the interceptor
+            if (DataCache.Offline) {
+                var mutableResponse = new MutableHttpResponse(0, '', '', {});
+                server.interceptor(request, mutableResponse); // reference will get modified
+                if (!mutableResponse._dispatched) // undefined
+                    console.error('DataCache: a MutableHttpResponse was intercepted and modified without send(). Using as is.');
+                return mutableResponse;
+            }
+
+            // Set a Timer to artifically determine if we are Online/Offline
+            // FIXME: to implement
+
+            // Issue the XHR and invoke the reviewer
+            // FIXME: to implement
+
+            // pass through for now
+            return false;
+        },
+
+        _candidateServerForUri: function(resolvedURI) {
+            var maxLength = -1;
+            var candidate = null;
+            for (var i=0, len=this.servers.length; i<len; ++i) {
+                var specificity = this.servers[i].specificityForUri(resolvedURI);
+                if (specificity > 0 && specificity > maxLength)
+                    candidate = this.servers[i];
+            }
+
+            return candidate;
+        },
     }
 
     // -------------------------------------------
@@ -650,6 +732,8 @@ CacheEvent.prototype = {
         this.versions = {};
         this._nextVersion = 0;
         this._effectiveCache = null;
+
+        DataCache.GlobalHost.addGroup(this);
     }
 
     DataCacheGroup.prototype = {
@@ -818,6 +902,7 @@ CacheEvent.prototype = {
     // ---------------------
     var origin = window.location.host;
     var host = new DataCacheHost(window);
+    DataCache.GlobalHost = host;
 
 
     // -----------------------
@@ -841,7 +926,8 @@ CacheEvent.prototype = {
     }
 
     navigator.registerOfflineHandler = function registerOfflineHandler(namespace, intercept, review) {
-        host.addServer(new LocalServer(namespace, intercept, review));
+        // FIXME: host?
+        DataCache.GlobalHost.addLocalServer(new LocalServer(namespace, intercept, review));
     }
 
 })();
@@ -860,8 +946,9 @@ CacheEvent.prototype = {
 
 function InterceptableXMLHttpRequest() {
 
-    // Internal request
+    // Internal request and values
     var xhr = this.xhr = new XMLHttpRequest();
+    this._headers = {};
 
     // Generate functions with non-closured values
     function genericApply(func) { return function() { return xhr[func].apply(xhr, arguments); } };
@@ -870,10 +957,13 @@ function InterceptableXMLHttpRequest() {
 
     // Pass through Interface, with the exception of some
     // NOTE: Getters / Setters need special handling
-    var exceptions = ['open'];
+    var exceptions = ['open', 'send', 'setRequestHeader'];
     var getters = ['status', 'readyState', 'responseXML', 'responseText', 'statusText'];
 
     for (var func in this.xhr) {
+        if (!this.xhr.hasOwnProperty(func))
+            continue;
+
         if (exceptions.indexOf(func) === -1) {
             if (getters.indexOf(func) !== -1 || func.indexOf("on") === 0) {
                 this.__defineGetter__(func, createGetter(func));
@@ -887,14 +977,48 @@ function InterceptableXMLHttpRequest() {
 };
 
 InterceptableXMLHttpRequest.prototype = {
-    open: function() {
+    setRequestHeader: function(name, value) {
+        this._headers[name] = value;
+
+        // pass through
+        this.xhr.setRequestHeader.apply(this.xhr, arguments);
+    },
+
+    open: function(method, uri) {
+        this._method = method;
+        this._uri = uri;
+
+        // pass through
         this.xhr.open.apply(this.xhr, arguments);
     },
 
-    send: function() {
-        // TODO: add 'send' to the exceptions list above
-        // 4.3.2. Changes to the networking model
+    send: function(data) {
+        var self = this;
+        setTimeout(function() {
+            var response = DataCache.GlobalHost.handleRequest(self.xhr, self._method, self._uri, data, self._headers);
+            delete self._headers;
+            delete self._method;
+            delete self._uri;
+            if (response) {
+                self.handleHttpResponse(response);
+                return;
+            }
+
+            // pass through
+            self.xhr.send.apply(self.xhr, arguments);
+        });
+    },
+
+    handleHttpResponse: function(response) {
+        delete this.status;
+        delete this.statusText;
+        delete this.readyState;
+        delete this.responseText;
+
+        this.status = response.statusCode;
+        this.statusText = response.statusMessage;
+        this.readyState = 4; // success
+        this.responseText = response.bodyText;
+        this.onreadystatechange(null);
     }
 }
-
-

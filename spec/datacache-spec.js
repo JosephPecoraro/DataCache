@@ -462,12 +462,16 @@ context('Local Server', function() {
 
         var interceptorCalled = false;
         var reviewerCalled = false;
+        var headerName = 'X-Test';
+        var headerValue = 'Test';
         var body = 'hello';
 
         function verify() {
             ok(xhr.status === 200);
             ok(xhr.statusText === Http.Status[200]);
             ok(xhr.responseText === body);
+            ok(xhr.getResponseHeader(headerName) === headerValue);
+            ok(xhr.getAllResponseHeaders().length > 0);
         }
 
         function interceptor(request, response) {
@@ -476,7 +480,7 @@ context('Local Server', function() {
 
             response.setStatus(200, Http.Status[200]);
             response.setResponseText(body);
-            response.setResponseHeader('X-Test', 'Test'); // FIXME: Check for this!
+            response.setResponseHeader(headerName, headerValue);
             response.send();
         }
 

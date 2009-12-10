@@ -101,7 +101,6 @@ DataCache.prototype = {
 
     swapCache: function() {
         this.group.effectiveCache = this.group.relevantCache;
-        // FIXME: so what?
     },
 
     eachModificationSince: function(version, callback, successCallback) {
@@ -809,11 +808,11 @@ CacheEvent.prototype = {
             var removals = [];
 
             var currentCache = this.versions[highVersion];
-            // need to know what was added/removed (readyState)
+            // FIXME: need to know what was added/removed (readyState)
 
             var olderCache = this._nextLowerCache(highVersion);
             while (olderCache) {
-                // need to know what was added/removed (readyState)
+                // FIXME: need to know what was added/removed (readyState)
                 olderCache = this._nextLowerCache(olderCache.version);
             }
 
@@ -947,6 +946,9 @@ function InterceptableXMLHttpRequest() {
 
     // Internal request and values
     var xhr = this.xhr = new XMLHttpRequest();
+
+    // Internal State
+    this._handled = false;
     this._headers = {};
 
     // Generate functions with non-closured values
@@ -956,7 +958,7 @@ function InterceptableXMLHttpRequest() {
 
     // Pass through Interface, with the exception of some
     // NOTE: Getters / Setters need special handling
-    var exceptions = ['open', 'send', 'setRequestHeader'];
+    var exceptions = ['open', 'send', 'setRequestHeader', 'getAllResponseHeaders', 'getResponseHeader'];
     var getters = ['status', 'readyState', 'responseXML', 'responseText', 'statusText'];
 
     for (var func in this.xhr) {
@@ -976,16 +978,10 @@ function InterceptableXMLHttpRequest() {
 };
 
 InterceptableXMLHttpRequest.prototype = {
-    setRequestHeader: function(name, value) {
-        this._headers[name] = value;
-
-        // pass through
-        this.xhr.setRequestHeader.apply(this.xhr, arguments);
-    },
-
-    open: function(method, uri) {
+    open: function(method, uri, async) {
         this._method = method;
         this._uri = uri;
+        this._async = (async === false ? false : true);
 
         // pass through
         this.xhr.open.apply(this.xhr, arguments);
@@ -993,10 +989,11 @@ InterceptableXMLHttpRequest.prototype = {
 
     send: function(data) {
         var self = this;
-        setTimeout(function() {
+        function action() {
             var response = DataCache.GlobalHost.handleRequest(self.xhr, self._method, self._uri, data, self._headers);
             delete self._headers;
             delete self._method;
+            delete self._async;
             delete self._uri;
             if (response) {
                 self.handleHttpResponse(response);
@@ -1005,7 +1002,12 @@ InterceptableXMLHttpRequest.prototype = {
 
             // pass through
             self.xhr.send.apply(self.xhr, arguments);
-        });
+        }
+
+        if (this._async)
+            setTimeout(action, 0);
+        else
+            action();
     },
 
     handleHttpResponse: function(response) {
@@ -1014,10 +1016,37 @@ InterceptableXMLHttpRequest.prototype = {
         delete this.readyState;
         delete this.responseText;
 
+        this._handled = true;
+        this._headers = response.headers;
+
         this.status = response.statusCode;
         this.statusText = response.statusMessage;
         this.readyState = 4; // success
         this.responseText = response.bodyText;
         this.onreadystatechange(null);
+    },
+
+    getAllResponseHeaders: function() {
+        if (this._handled)
+            return this._headersAsString();
+        return this.xhr.getAllResponseHeaders.apply(this.xhr, arguments);
+    },
+
+    getResponseHeader: function(name) {
+        if (this._handled)
+            return this._headers[name];
+        return this.xhr.getResponseHeader.apply(this.xhr, arguments);
+    },
+
+    setRequestHeader: function(name, value) {
+        this._headers[name] = value;
+        this.xhr.setRequestHeader.apply(this.xhr, arguments);
+    },
+
+    _headersAsString: function() {
+        var arr = [];
+        for (var name in this._headers)
+            arr.push(name + ': ' + this._headers[name]);
+        return arr.join("\n");
     }
 }

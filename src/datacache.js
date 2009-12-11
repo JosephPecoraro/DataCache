@@ -102,8 +102,9 @@ DataCache.prototype = {
         this.group.effectiveCache = this.group.relevantCache;
     },
 
-    eachModificationSince: function(version, callback, successCallback) {
-        this.group.eachModificationFromTo(this.version, version, callback, successCallback);
+    eachModificationSince: function(version, itemCallback, successCallback) {
+        version = (version === null || version === undefined ? -1 : version);
+        this.group.eachModificationFromTo(this.version, version, itemCallback, successCallback);
     },
 
     manage: function(uri, resource) {
@@ -130,6 +131,13 @@ DataCache.prototype = {
             throw 'DataCache: no such item'; // FIXME: raise NOT_FOUND_ERR
 
         return item;
+    },
+
+    getManagedItems: function() {
+        var items = [];
+        for (var uri in this.managed)
+            items.push({ uri: uri, item: this.managed[uri] });
+        return items;
     }
 }
 
@@ -265,11 +273,12 @@ CacheTransaction.prototype = {
 
         var location = host.realHost.location; // NOTE: realHost is always window
         this._checkURI(location, uri);
-        var absoluteURI = DataCache.resolveAbsoluteFromBase(location, uri);
+        var resolvedURI = DataCache.resolveAbsoluteFromBase(location, uri);
 
-        var item = cache.getItem(absoluteURI); // will throw an error if not found
-        cache.manage(absoluteURI, new CacheItem(CacheItem.GONE));
-        cache.group.host.queueTask('released', cache, absoluteURI);
+        var item = cache.getItemResolved(resolvedURI); // will throw an error if not found
+        console.log('releasing', resolvedURI);
+        cache.manage(resolvedURI, new CacheItem(CacheItem.GONE));
+        cache.group.host.queueTask('released', cache, resolvedURI);
     },
 
     commit: function() {
@@ -844,33 +853,69 @@ CacheEvent.prototype = {
             this._nextVersion++;
         },
 
-        eachModificationFromTo: function(highVersion, lowVersion, callback, successCallback) {
+        eachModificationFromTo: function(highVersion, lowVersion, itemCallback, successCallback) {
             var additions = [];
             var removals = [];
+            var table = {};
 
+            function pullAdditionsAndRemovalsFromCache(cache) {
+                var managedItems = cache.getManagedItems();
+                for (var i=0, len=managedItems.length; i<len; ++i) {
+                    var mItem = managedItems[i];
+                    var item = mItem.item;
+                    var uri = mItem.uri;
+                    if (uri in table)
+                        continue;
+
+                    switch (item.readyState) {
+                        case CacheItem.CACHED:
+                            table[uri] = item;
+                            additions.push(uri);
+                            break;
+                        case CacheItem.GONE:
+                            table[uri] = item;
+                            removals.push(uri);
+                            break;
+                    }
+                }
+            }
+
+            // Populate the list with the current items
             var currentCache = this.versions[highVersion];
-            // FIXME: need to know what was added/removed (readyState)
+            pullAdditionsAndRemovalsFromCache(currentCache);
 
+            // Go back through time, to see if we missed anything
             var olderCache = this._nextLowerCache(highVersion);
             while (olderCache) {
-                // FIXME: need to know what was added/removed (readyState)
-                olderCache = this._nextLowerCache(olderCache.version);
+                var oldVersion = olderCache.version;
+                if (oldVersion <= lowVersion)
+                    break;
+
+                pullAdditionsAndRemovalsFromCache(olderCache);
+                olderCache = this._nextLowerCache(oldVersion);
             }
 
-            if (callback) {
-                for (var i=0, len=additions.length; i<len; ++i)
-                    setTimeout(callback, 0, additions[i], 'addition');
-                for (var i=0, len=additions.length; i<len; ++i)
-                    setTimeout(callback, 0, additions[i], 'removal');
+            // Remove items that are in the low cache (to keep "since" list small);
+            var lowCache = this.versions[lowVersion];
+            if (lowCache) {
+                var managedItems = lowCache.getManagedItems();
+                for (var i=0, len=managedItems.length; i<len; ++i)
+                    delete table[managedItems[i].uri];
             }
 
+            // Callbacks per item
+            if (itemCallback)
+                for (var uri in table)
+                    setTimeout(itemCallback, 0, table[uri], uri);
+
+            // Success callback
             if (successCallback)
-                successCallback.call(this);
+                setTimeout(successCallback, 0);
         },
 
         _nextLowerCache: function(version) {
-            for (var i=(version-1); i>0; --i) {
-                if (this.versions[i])
+            for (var i=(version-1); i>=0; --i) {
+                if (i in this.versions)
                     return this.versions[i];
             }
 

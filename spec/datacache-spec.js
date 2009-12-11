@@ -452,6 +452,72 @@ context('Online Transaction', function() {
 });
 
 
+context('DataCache eachModificationSince', function() {
+    should('return all cached files', function() {
+        stop();
+
+        // Counters / Test States
+        var itemCb1 = 0;
+        var itemCb2 = 0;
+        var deletedCount = 0;
+        var calledSuccessCallback1 = false;
+        var calledSuccessCallback2 = false;
+        function successCallback1() { calledSuccessCallback1 = true; }
+        function successCallback2() { calledSuccessCallback2 = true; }
+        function itemCallback2(item, uri) { itemCb2++; }
+        function itemCallback1(item, uri) {
+            itemCb1++;
+            if (item.readyState === CacheItem.GONE)
+                deletedCount++;
+        }
+
+        // Pick our own range of change versions
+        window.openDataCache().swapCache();
+        var cache = window.openDataCache();
+
+        // start version
+        var highVersion = 0;
+        var lowVersion = window.openDataCache().version;
+
+        // -- LOW: add a.txt, b.txt, c.txt
+        cache.transaction(function(tx) {
+            tx.capture('files/a.txt');
+            tx.capture('files/b.txt');
+            tx.capture('files/c.txt');
+            tx.commit();
+        });
+
+        // -- HIGH: remove b.txt
+        setTimeout(function() {
+            cache = window.openDataCache();
+            cache.transaction(function(tx) {
+                tx.release('files/b.txt');
+                tx.commit();
+            });
+
+            // end version
+            cache.swapCache();
+            highVersion = window.openDataCache().version;
+        });
+
+        setTimeout(function() {
+            var cache = window.openDataCache();
+            cache.eachModificationSince(lowVersion, itemCallback1, successCallback1); // a, b, and c
+            cache.eachModificationSince(null, itemCallback2, successCallback2);       // everything so far
+        }, LATENCY);
+
+        setTimeout(function() {
+            ok(itemCb1 === 3);
+            ok(itemCb2 > 3);
+            ok(deletedCount === 1);
+            ok(calledSuccessCallback1);
+            ok(calledSuccessCallback2);
+            start();
+        }, LATENCY*2);
+    });
+});
+
+
 context('Local Server', function() {
     should('return dynamic intercepted representations', function() {
         stop();

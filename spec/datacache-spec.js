@@ -70,7 +70,7 @@ context('Resolving Absolute URLs', function() {
 
 
 context('Parsing Headers', function() {
-    var parse = CacheTransaction.prototype.parseHeaders;
+    var parse = DataCache.parseHeaders;
     var headersText = [
         'Date: Sun, 06 Dec 2009 05:19:04 GMT',     // typical data
         'Content-Encoding: gzip',                  // typical data
@@ -452,15 +452,15 @@ context('Online Transaction', function() {
 
 
 context('Local Server', function() {
-    var uri = 'blah.txt';
-    var body = 'none';
-    var method = 'GET';
 
     should('return dynamic intercepted representations', function() {
         stop();
 
         DataCache.Offline = true;
 
+        var uri = 'blah.txt';
+        var body = 'hello';
+        var method = 'GET';
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
             tx.capture(uri, body, null, [method]);
@@ -470,7 +470,6 @@ context('Local Server', function() {
         var reviewerCalled = false;
         var headerName = 'X-Test';
         var headerValue = 'Test';
-        var body = 'hello';
 
         function verify() {
             ok(xhr.status === 200);
@@ -502,23 +501,111 @@ context('Local Server', function() {
         xhr.send();
 
         setTimeout(function() {
+            navigator.removeRegisteredOfflineHandlers();
             ok(interceptorCalled);
             ok(!reviewerCalled);
             start();
-        });
+        }, LATENCY);
     });
 
     should('return dynamic reviewed representations', function() {
         stop();
-        // FIXME: Implement test!
-        setTimeout(function() {
-            start();
+
+        DataCache.Offline = false;
+
+        var uri = 'data.txt';
+        var body = 'Hello, World!';
+        var method = 'GET';
+        var cache = window.openDataCache();
+        cache.offlineTransaction(function(tx) {
+            tx.capture(uri, body, null, [method]);
         });
+
+        var interceptorCalled = false;
+        var reviewerCalled = false;
+
+        function verify() {
+            if (xhr.readyState === 4) {
+                ok(xhr.status === 200);
+                ok(xhr.statusText === Http.Status[200]);
+                ok(xhr.responseText === body);
+            }
+        }
+
+        function interceptor(request, response) {
+            interceptorCalled = true;
+        }
+
+        function reviewer(request, response) {
+            reviewerCalled = true;
+            ok(response.statusCode === 200);
+            ok(response.statusMessage === 'HTTP/1.1 ' + Http.Status[200]);
+            ok(response.bodyText === body);
+        }
+
+        navigator.registerOfflineHandler(uri, interceptor, reviewer);
+
+        var xhr = new InterceptableXMLHttpRequest();
+        xhr.open(method, uri);
+        xhr.onreadystatechange = verify;
+        xhr.send();
+
+        setTimeout(function() {
+            navigator.removeRegisteredOfflineHandlers();
+            ok(!interceptorCalled);
+            ok(reviewerCalled);
+            start();
+        }, LATENCY);
     });
 });
 
 
-context('Online Transaction with 4xx or 5xx error', function() {
+context('[*] LocalServer', function() {
+    should('bypass with X-Bypass-DataCache header', function() {
+        stop();
+
+        DataCache.Offline = true;
+
+        var uri = 'data.txt';
+        var body = 'Hello, World!';
+        var method = 'GET';
+        var cache = window.openDataCache();
+        cache.offlineTransaction(function(tx) {
+            tx.capture(uri, body, null, [method]);
+        });
+
+        var interceptorCalled = false;
+        var reviewerCalled = false;
+
+        function verify() {
+            if (xhr.readyState === 4) {
+                ok(xhr.status === 200);
+                ok(xhr.statusText === Http.Status[200]);
+                ok(xhr.responseText === body);
+            }
+        }
+
+        function interceptor() { interceptorCalled = true; }
+        function reviewer() { reviewerCalled = true; }
+        navigator.registerOfflineHandler(uri, interceptor, reviewer);
+
+        var xhr = new InterceptableXMLHttpRequest();
+        xhr.open(method, uri);
+        xhr.setRequestHeader('X-Bypass-DataCache', 'true');
+        xhr.onreadystatechange = verify;
+        xhr.send();
+
+        setTimeout(function() {
+            navigator.removeRegisteredOfflineHandlers();
+            ok(!interceptorCalled);
+            ok(!reviewerCalled);
+            start();
+        }, LATENCY);
+    });
+});
+
+
+context('[*] Online Transaction with 4xx or 5xx error', function() {
     var uri = 'code.php?code=500';
     should('fire error event', function() {
         stop();
@@ -539,7 +626,7 @@ context('Online Transaction with 4xx or 5xx error', function() {
 });
 
 
-context('Online Transaction with 401', function() {
+context('[*] Online Transaction with 401', function() {
     var uri = 'code.php?code=401';
     var cache = window.openDataCache();
 

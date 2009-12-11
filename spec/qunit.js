@@ -992,7 +992,6 @@ QUnit.jsDump = (function() {
 				var l = fn.length;
 				if ( !l ) return '';				
 				
-				console.log(l);
 				var args = Array(l);
 				while ( l-- )
 					args[l] = String.fromCharCode(97+l);//97 is 'a'

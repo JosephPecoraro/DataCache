@@ -140,6 +140,7 @@ DataCache.prototype = {
 
 DataCache.GlobalHost = null; // set later
 DataCache.Offline = false;   // set as determined
+DataCache.StatusCanBeZero = /^file/.test(window.location.protocol);
 
 // TODO: make an XHR request for the current page to determine offline status
 // also, store data in sessionStorage (and timestamp) to carry such data along.
@@ -209,6 +210,32 @@ DataCache.resolveAbsoluteFromBase = function(location, uri) {
     // Return absolute representation
     return str;
 }
+
+DataCache.parseHeaders = function(headersText) {
+    if (!headersText)
+        return {};
+
+    // Remove leading whitespace
+    function trimLeft(s) {
+        return s.replace(/^\s+/, '');
+    }
+
+    // Convert HTTP key/value pairs into a hash
+    var headers = {};
+    var lines = headersText.split(/\n/);
+    for (var i=0, len=lines.length; i<len; ++i) {
+        var line = trimLeft(lines[i]);
+        var colonIndex = line.indexOf(':');
+        if (colonIndex !== -1) {
+            var key = line.substring(0, colonIndex);
+            var value = trimLeft(line.substring(colonIndex+1));
+            headers[key] = value;
+        }
+    }
+
+    return headers;
+}
+
 
 
 // --------------------------------
@@ -303,31 +330,6 @@ CacheTransaction.prototype = {
                 throw "CacheTransaction: host change in attempted cache";
         }
 
-    },
-
-    parseHeaders: function(headersText) {
-        if (!headersText)
-            return {};
-
-        // Remove leading whitespace
-        function trimLeft(s) {
-            return s.replace(/^\s+/, '');
-        }
-
-        // Convert HTTP key/value pairs into a hash
-        var headers = {};
-        var lines = headersText.split(/\n/);
-        for (var i=0, len=lines.length; i<len; ++i) {
-            var line = trimLeft(lines[i]);
-            var colonIndex = line.indexOf(':');
-            if (colonIndex !== -1) {
-                var key = line.substring(0, colonIndex);
-                var value = trimLeft(line.substring(colonIndex+1));
-                headers[key] = value;
-            }
-        }
-
-        return headers;
     }
 };
 
@@ -369,9 +371,8 @@ OnlineTransaction.prototype = {
         xhr.open("GET", uri); // asynchronous
         xhr.onreadystatechange = function() {
             // Workaround for local file XHRs
-            var statusCanBeZero = /^file/.test(window.location.protocol);
             if (xhr.readyState === 4) {
-                if (xhr.status === 200 || (statusCanBeZero && xhr.status === 0))
+                if (xhr.status === 200 || (DataCache.StatusCanBeZero && xhr.status === 0))
                     self._captureSuccess(xhr, uri, methods);
                 else
                     self._captureFailure(xhr);
@@ -387,7 +388,7 @@ OnlineTransaction.prototype = {
         console.log('success', xhr);
         var body = xhr.responseText; // FIXME: binary?
         var type = xhr.getResponseHeader('Content-Type'); // FIXME: determine from filetype as well?
-        var headers = this.parseHeaders(xhr.getAllResponseHeaders());
+        var headers = DataCache.parseHeaders(xhr.getAllResponseHeaders());
         var item = new CacheItem(CacheItem.CACHED, body, type, methods, headers);
         this.cache.manage(uri, item);
         this.cache.group.host.queueTask('captured', this.cache, uri);
@@ -584,7 +585,8 @@ Http.Status = {
   502: 'Bad Gateway',
   503: 'Service Unavailable',
   504: 'Gateway Time-out',
-  505: 'HTTP Version not supported'
+  505: 'HTTP Version not supported',
+  999: 'Unknown Due to file://'
 };
 
 
@@ -625,7 +627,7 @@ CacheEvent.prototype = {
     };
 
     Event.prototype.initCacheEventNS = function(namespaceURI, cache, uri) {
-        // FIXME: namespace is ignored
+        // NOTE: namespace is ignored, cannot be handled with JavaScript
         this.initCacheEvent(cache, uri);
     }
 
@@ -661,7 +663,7 @@ CacheEvent.prototype = {
             this.servers.push(server);
         },
 
-        handleRequest: function(xhr, method, uri, data, headers) {
+        handleRequest: function(ixhr, method, uri, data, headers, async) {
 
             // Immediate return if a bypass header is set
             if (headers['X-Bypass-DataCache'] === 'true')
@@ -701,13 +703,34 @@ CacheEvent.prototype = {
             }
 
             // Set a Timer to artifically determine if we are Online/Offline
+            var connectivityDetectionTimer;
             // FIXME: to implement
 
-            // Issue the XHR and invoke the reviewer
-            // FIXME: to implement
+            // Synchronous XHR should be handled synchronously
+            var xhr = ixhr.xhr;
+            if (!async) {
+                xhr.send(data);
+                return this.httpResponseFromXhr(xhr);
+            }
 
-            // pass through for now
-            return false;
+            // We will need to issue the XHR on our own
+            // with our own handlers to monitor the progress.
+            var self = this;
+            var oldReadyStateHandler = xhr.onreadystatechange;
+            function readyStateHandler() {
+                if (xhr.readyState === 4) {
+                    clearTimeout(connectivityDetectionTimer);
+                    var response = self.httpResponseFromXhr(xhr);
+                    server.reviewer(request, response);
+                    xhr.onreadystatechange = oldReadyStateHandler;
+                    ixhr.handleHttpResponse(response);
+                }
+            }
+
+            // We are handling it asynchronously
+            xhr.onreadystatechange = readyStateHandler;
+            xhr.send(data);
+            return true;
         },
 
         _candidateServerForUri: function(resolvedURI) {
@@ -721,6 +744,21 @@ CacheEvent.prototype = {
 
             return candidate;
         },
+
+        httpResponseFromXhr: function(xhr) {
+            var status = xhr.status;
+            var statusText = xhr.statusText;
+            var responseText = xhr.responseText;
+            var headers = DataCache.parseHeaders(xhr.getAllResponseHeaders());
+
+            // Poor Local File semantics we can only guess at
+            if (DataCache.StatusCanBeZero && xhr.status === 0) {
+                status = (xhr.responseText.length !== 0 ? 200 : 999);
+                statusText = Http.Status[status];
+            }
+
+            return new HttpResponse(status, statusText, responseText, headers);
+        }
     }
 
     // -------------------------------------------
@@ -928,8 +966,16 @@ CacheEvent.prototype = {
     }
 
     navigator.registerOfflineHandler = function registerOfflineHandler(namespace, intercept, review) {
-        // FIXME: host?
         DataCache.GlobalHost.addLocalServer(new LocalServer(namespace, intercept, review));
+    }
+
+
+    // ----------------------------
+    //   Public Non-Standard APIs
+    // ----------------------------
+
+    navigator.removeRegisteredOfflineHandlers = function() {
+        DataCache.GlobalHost._servers = [];
     }
 
 })();
@@ -984,7 +1030,7 @@ InterceptableXMLHttpRequest.prototype = {
     open: function(method, uri, async) {
         this._method = method;
         this._uri = uri;
-        this._async = (async === false ? false : true);
+        this._async = (async !== false);
 
         // pass through
         this.xhr.open.apply(this.xhr, arguments);
@@ -993,11 +1039,20 @@ InterceptableXMLHttpRequest.prototype = {
     send: function(data) {
         var self = this;
         function action() {
-            var response = DataCache.GlobalHost.handleRequest(self.xhr, self._method, self._uri, data, self._headers);
+
+            // Inject our own Network logic
+            var response = DataCache.GlobalHost.handleRequest(self, self._method, self._uri, data, self._headers, self._async);
             delete self._headers;
             delete self._method;
             delete self._async;
             delete self._uri;
+
+            // Response may be:
+            //   true:         handled asynchronously
+            //   HttpResponse: was handled and here is the result
+            //   false:        was not handled (pass through)
+            if (response === true)
+                return;
             if (response) {
                 self.handleHttpResponse(response);
                 return;

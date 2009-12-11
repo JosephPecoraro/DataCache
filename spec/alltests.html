@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>All Tests</title>
+    <link rel="stylesheet" href="shoulda.css" type="text/css" media="screen" title="no title" charset="utf-8">
+    <script src="qunit.js" type="text/javascript" charset="utf-8"></script>
+    <script src="shoulda.js" type="text/javascript" charset="utf-8"></script>
+    <style type="text/css">
+        #test-links { font-size: 1.5em; width: 500px; margin: 0 auto; list-style-type: none; text-align: center; }
+        #test-links li { color: gray; margin-bottom: 10px; }
+        #test-links a { color: white; }
+    </style>
+</head>
+<body>
+    <h2 id="qunit-banner">All Tests</h2>
+    <h2 id="qunit-userAgent"></h2>
+    <ol id="qunit-tests"></ol>
+    <ul id="test-links"></ul>
+    <script type="text/javascript">
+
+        // Add Test Link
+        var list = document.getElementById('test-links');
+        function addLinkToTest(uri, text) {
+            var link = document.createElement('a');
+            link.appendChild(document.createTextNode(text));
+            link.href = uri;
+            var li = document.createElement('li');
+            li.appendChild(link);
+            li.appendChild(document.createTextNode(' - ' + uri));
+            list.appendChild(li);
+        }
+
+        // Fundamental Test
+        addLinkToTest('datacache.html', 'Fundamental Test Suite');
+
+        // Use Cases
+        var useCases = 2;
+        for (var i=1; i<=useCases; ++i)
+            addLinkToTest('datacache-use-case-'+i+'.html', 'Use Case #'+i);
+
+    </script>
+</body>
+</html>

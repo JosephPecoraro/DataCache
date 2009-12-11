@@ -23,13 +23,14 @@ function basicEventChecker(type, object, flag, extra) {
 
 context('Basics', function() {
     should('have public methods', function() {
-        ok(window.openDataCache !== undefined, "window.openDataCache exists");
+        ok(window.openDataCache !== undefined, 'window.openDataCache exists');
+        ok(navigator.registerOfflineHandler !== undefined, 'window.registerOfflineHandler exists');
     });
 
     should('have constants', function() {
-        ok(typeof DataCache.IDLE === 'number', "DataCache.IDLE exists");
-        ok(typeof DataCache.READY === 'number', "DataCache.IDLE exists");
-        ok(typeof DataCache.OBSOLETE === 'number', "DataCache.IDLE exists");
+        ok(typeof DataCache.IDLE === 'number', 'DataCache.IDLE exists');
+        ok(typeof DataCache.READY === 'number', 'DataCache.IDLE exists');
+        ok(typeof DataCache.OBSOLETE === 'number', 'DataCache.IDLE exists');
     });
 });
 
@@ -452,7 +453,6 @@ context('Online Transaction', function() {
 
 
 context('Local Server', function() {
-
     should('return dynamic intercepted representations', function() {
         stop();
 

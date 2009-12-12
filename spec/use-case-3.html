@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>DataCache Use Case 1</title>
+    <title>DataCache Use Case 3</title>
 
     <!-- Testing Libraries -->
     <link rel="stylesheet" href="shoulda.css" type="text/css" media="screen" title="no title" charset="utf-8">
@@ -13,53 +13,64 @@
     <script src="../src/datacache.js" type="text/javascript" charset="utf-8"></script>
 </head>
 <body>
-    <h2 id="qunit-banner">DataCache Use Case 1 [always work]</h2>
+    <h2 id="qunit-banner">DataCache Use Case 3 [needs server]</h2>
     <h2 id="qunit-userAgent"></h2>
     <ol id="qunit-tests"></ol>
 
 <!-- Test Case -->
 <script type="text/javascript" charset="utf-8">
-context('Offline Capture a Resource', function() {
-    should('work as expected', function() {
-        stop();
-        expect(6);
+context('DataCache Library', function() {
 
-        // Setup as Offline
-        DataCache.Offline = true;
+    // Setup as Online
+    DataCache.Offline = false;
+    DataCache.TimeoutDuration = 2000; // 2 seconds for this test
+
+    should('automatically detect and transition to Offline', function() {
+        stop();
+        expect(5);
 
         // Values
-        var uri = 'foo.json';
-        var body = '[0,1,2]';
+        var uri = 'sleep.php';
+        var body = 'clientside data';
+        var myBody = 'intercepted data';
+        var method = 'GET';
 
-        // Event to fire before transaction begins
-        window.addEventListener('off-line-updating', function(event) {
-            addToOrder(0, 'off-line-updating listener');
-        }, false);
-
-        // Event to fire on capture
-        window.addEventListener('captured', function(event) {
-            addToOrder(2, 'captured listener');
-        }, false);
-
-        // Offline Capture a Resource
+        // Offline Capture the Resource to review later
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
-            addToOrder(1, 'transaction');
-            tx.capture(uri, body, 'text/plain', []);
+            addToOrder(0, 'transaction');
+            tx.capture(uri, body, 'text/plain', [method]);
         });
+
+        // Handler for the Resource
+        navigator.registerOfflineHandler(uri,
+            function(request, response) {
+                addToOrder(1, 'interceptor');
+                ok(true, 'interceptor was called');
+                response.setStatus(200, Http.Status[200]);
+                response.setResponseText(myBody);
+                response.send();
+            },
+            function() {
+                ok(false, 'reviewer should not be called');
+            }
+        );
 
         // Verification of Data Returned from Cache
         function verify() {
             if (xhr.readyState !== 4)
                 return;
 
-            addToOrder(3, 'onreadystate', xhr);
+            addToOrder(2, 'onreadystate');
             ok(xhr.status === 200);
             ok(xhr.statusText === Http.Status[200]);
-            ok(xhr.responseText === body);
+            ok(xhr.responseText === myBody);
         }
 
-        // Response with that Resource Automatically, without going to the wire
+        // DataCache Library should transition to Offline
+        //   - xhr will Timeout
+        //   - library will transition to Offline
+        //   - library will handle the original request
         var xhr = new InterceptableXMLHttpRequest();
         xhr.open('GET', uri);
         xhr.onreadystatechange = verify;
@@ -67,11 +78,13 @@ context('Offline Capture a Resource', function() {
 
         // End the test
         setTimeout(function() {
-            ok(cache === window.openDataCache());
-            ok(cache.getItem(uri).body === body);
             ok(checkOrder());
             start();
-        }, 0);
+        }, DataCache.TimeoutDuration+500);
+    });
+
+    should('be Offline', function() {
+        ok(DataCache.Offline);
     });
 });
 </script>

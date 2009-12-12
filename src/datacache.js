@@ -146,8 +146,9 @@ DataCache.prototype = {
 //   Global Functions and Values
 // -------------------------------
 
-DataCache.GlobalHost = null; // set later
-DataCache.Offline = false;   // set as determined
+DataCache.GlobalHost = null;      // set later
+DataCache.Offline = false;        // set as determined
+DataCache.TimeoutDuration = 3000; // three seconds
 DataCache.StatusCanBeZero = /^file/.test(window.location.protocol);
 
 // TODO: make an XHR request for the current page to determine offline status
@@ -276,7 +277,6 @@ CacheTransaction.prototype = {
         var resolvedURI = DataCache.resolveAbsoluteFromBase(location, uri);
 
         var item = cache.getItemResolved(resolvedURI); // will throw an error if not found
-        console.log('releasing', resolvedURI);
         cache.manage(resolvedURI, new CacheItem(CacheItem.GONE));
         cache.group.host.queueTask('released', cache, resolvedURI);
     },
@@ -289,14 +289,15 @@ CacheTransaction.prototype = {
         var group = cache.group;
 
         group.update(cache);
-        this.status = CacheTransaction.COMMITTED; // ?!?!
+        this.status = CacheTransaction.COMMITTED; // FIXME: Missing from the Spec?!?!
 
-        // FIXME: make commitSubsteps
         if (this.offline)
             group.effectiveCache = cache;
         else
             group.status = DataCache.IDLE;
-        // FIXME: special queueTask?
+
+        // FIXME: Spec says this is special?!?!
+        cache.group.host.queueTask('ready', cache);
 
         if (this.oncommitted) {
             var self = this;
@@ -703,7 +704,7 @@ CacheEvent.prototype = {
             var request = new HttpRequest(method, resolvedURI, data, headers);
 
             // Offline => Mutable Response for the interceptor
-            if (DataCache.Offline) {
+            function handleWhenOffline() {
                 var mutableResponse = new MutableHttpResponse(0, '', '', {});
                 server.interceptor(request, mutableResponse); // reference will get modified
                 if (!mutableResponse._dispatched) // undefined
@@ -711,9 +712,20 @@ CacheEvent.prototype = {
                 return mutableResponse;
             }
 
+            // We are Offline right now
+            if (DataCache.Offline)
+                return handleWhenOffline();
+
             // Set a Timer to artifically determine if we are Online/Offline
-            var connectivityDetectionTimer;
-            // FIXME: to implement
+            var ABORTED = false;
+            var connectivityDetectionTimer = setTimeout(function() {
+                ABORTED = true;
+                xhr.abort();
+                DataCache.Offline = true;
+                var mutableResponse = handleWhenOffline();
+                xhr.onreadystatechange = oldReadyStateHandler;
+                ixhr.handleHttpResponse(mutableResponse);
+            }, DataCache.TimeoutDuration);
 
             // Synchronous XHR should be handled synchronously
             var xhr = ixhr.xhr;
@@ -728,7 +740,11 @@ CacheEvent.prototype = {
             var oldReadyStateHandler = xhr.onreadystatechange;
             function readyStateHandler() {
                 if (xhr.readyState === 4) {
+                    if (ABORTED)
+                        return;
+
                     clearTimeout(connectivityDetectionTimer);
+                    DataCache.Offline = false;
                     var response = self.httpResponseFromXhr(xhr);
                     server.reviewer(request, response);
                     xhr.onreadystatechange = oldReadyStateHandler;

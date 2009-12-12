@@ -1072,6 +1072,9 @@ function InterceptableXMLHttpRequest() {
     var getters = ['status', 'readyState', 'responseXML', 'responseText', 'statusText'];
 
     for (var func in this.xhr) {
+        if (!this.xhr.hasOwnProperty(func))
+            continue;
+
         if (exceptions.indexOf(func) === -1) {
             if (getters.indexOf(func) !== -1 || func.indexOf("on") === 0) {
                 this.__defineGetter__(func, createGetter(func));

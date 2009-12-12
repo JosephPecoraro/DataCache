@@ -14,6 +14,10 @@ and provide feedback or advice.
 
 Copyright (c) 2009 Joseph Pecoraro, released under the MIT license
 
+### Tests are Online
+
+Here is the [Test Suite][Tests].
+
 ### Contact Information
 Name: Joseph Pecoraro  
 Blog: [http://blog.bogojoker.com][Blog]  
@@ -23,3 +27,4 @@ Email: [joepeck02@gmail.com][Email]
 [Blog]: http://blog.bogojoker.com "Blog"
 [Email]: joepeck02@gmail.com "Email"
 [DataCache]: http://dev.w3.org/2006/webapi/DataCache/ "DataCache API"
+[Tests]: http://bogojoker.com/datacache/spec/all-tests.html "Test Suite"

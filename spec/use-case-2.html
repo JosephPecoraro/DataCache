@@ -50,6 +50,7 @@ context('Non Captured Resource', function() {
 
         // Verification of Data Returned from Cache
         function verify() {
+            console.log('verify', xhr.readyState);
             if (xhr.readyState !== 4)
                 return;
 
@@ -61,7 +62,7 @@ context('Non Captured Resource', function() {
         // Response with that Resource Automatically, without going to the wire
         var xhr = new InterceptableXMLHttpRequest();
         xhr.open('GET', dataFileURI);
-        xhr.onreadystatechange = verify;
+        xhr.onload = verify;
         xhr.send();
 
         // End the test

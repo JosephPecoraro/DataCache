@@ -53,7 +53,7 @@ context('Non Captured Resource', function() {
             if (xhr.readyState !== 4)
                 return;
 
-            addToOrder(3, 'onreadystate', xhr);
+            addToOrder(3, 'onreadystate');
             ok(xhr.status === 200 || xhr.status === 0);
             ok(xhr.responseText === dataFileText);
         }

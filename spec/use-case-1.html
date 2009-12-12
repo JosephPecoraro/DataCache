@@ -53,7 +53,7 @@ context('Offline Capture a Resource', function() {
             if (xhr.readyState !== 4)
                 return;
 
-            addToOrder(3, 'onreadystate', xhr);
+            addToOrder(3, 'onreadystate');
             ok(xhr.status === 200);
             ok(xhr.statusText === Http.Status[200]);
             ok(xhr.responseText === body);

@@ -19,8 +19,8 @@ function addToOrder(id, str) {
 }
 
 function checkOrder() {
-    addToOrder(4, 'test end');
-    console.log(order);
+    addToOrder(order[order.length-1]+1, 'test end');
+    console.log('resulting order', order);
     for (var i=0, len=order.length; i<len; ++i)
         if (order[i] !== i)
             return false;

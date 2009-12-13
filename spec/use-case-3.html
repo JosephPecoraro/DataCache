@@ -25,7 +25,7 @@ context('DataCache Library', function() {
     DataCache.Offline = false;
     DataCache.TimeoutDuration = 2000; // 2 seconds for this test
 
-    should('automatically detect and transition to Offline', function() {
+    should('automatically detect and transition to Offline and Intercept requests', function() {
         stop();
         expect(5);
 

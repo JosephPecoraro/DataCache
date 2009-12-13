@@ -189,14 +189,14 @@ context('DataCacheGroup/Host', function() {
 
 context('DataCache', function() {
     should('be the same', function() {
-        ok(window.openDataCache() === window.openDataCache(), 'Same returned');
+        ok(window.openDataCache() === window.openDataCache(), 'Same cache returned');
     });
 });
 
 
 context('Offline Transaction', function() {
     should('trigger off-line-updating event', function() {
-        stop();
+        stop(); expect(3);
 
         var flags = {};
         basicEventChecker('off-line-updating', flags, 'firedOfflineUpdating');
@@ -207,9 +207,9 @@ context('Offline Transaction', function() {
         });
 
         setTimeout(function() {
-            ok(flags.callbackFlag, "did fire");
-            ok(flags.firedOfflineUpdating, "did fire");
-            ok(!!flags.firedOfflineUpdatingEvent, "new cache"); // which cache should this be?
+            ok(flags.callbackFlag, "did fire callback");
+            ok(flags.firedOfflineUpdating, "did fire off-line-updating event");
+            ok(!!flags.firedOfflineUpdatingEvent, "fired event had a cache");
             start();
         }); // no latency needed, these are all queued setTimeout's
     });
@@ -221,7 +221,7 @@ context('Offline Capture', function() {
     var uri = 'blah.html';
 
     should('capture, manage, and getItem a resource', function() {
-        stop();
+        stop(); expect(9);
 
         var flags = {};
         basicEventChecker('captured', flags, 'firedCapturedEvent');
@@ -229,7 +229,7 @@ context('Offline Capture', function() {
         var itemCallbackData = null;
         var cache = window.openDataCache();
         cache.offlineTransaction(function(tx) {
-            ok(tx.offline);
+            ok(tx.offline, 'transaction is offline');
             tx.capture(uri, body, 'text/plain', ['GET']);
             try { tx.getItem("DOESNOTEXIST", function() {}); }
             catch (e) { flags.exceptionNotFound = true; }
@@ -248,18 +248,18 @@ context('Offline Capture', function() {
         }
 
         setTimeout(function() {
-            ok(flags.firedCapturedEvent);
-            ok(!!flags.firedCapturedEventEvent.cache);
-            ok(!!flags.firedCapturedEventEvent.uri);
-            ok(flags.exceptionNotFound);
-            ok(flags.calledItemCallback);
+            ok(flags.firedCapturedEvent, 'fired captured event');
+            ok(!!flags.firedCapturedEventEvent.cache, 'fired event had a cache');
+            ok(!!flags.firedCapturedEventEvent.uri), 'fired event had a uri';
+            ok(flags.exceptionNotFound), 'throws and exception when getItem is not found';
+            ok(flags.calledItemCallback, 'called the item callback');
             verify();
             start();
         }, LATENCY);
     });
 
     should('capture and release a resource', function() {
-        stop();
+        stop(); expect(7);
         var txCache = null;
 
         var flags = {};
@@ -274,12 +274,12 @@ context('Offline Capture', function() {
         });
 
         setTimeout(function() {
-            ok(flags.firedCapturedEvent, 'did fire');
-            ok(!!flags.firedCapturedEventEvent.cache);
-            ok(!!flags.firedCapturedEventEvent.uri);
-            ok(flags.firedReleasedEvent, 'did fire');
-            ok(!!flags.firedReleasedEventEvent.cache);
-            ok(!!flags.firedReleasedEventEvent.uri);
+            ok(flags.firedCapturedEvent, 'fired captured event');
+            ok(!!flags.firedCapturedEventEvent.cache, 'fired event had a cache');
+            ok(!!flags.firedCapturedEventEvent.uri, 'fired event had a uri');
+            ok(flags.firedReleasedEvent, 'fired released event');
+            ok(!!flags.firedReleasedEventEvent.cache, 'fired event had a cache');
+            ok(!!flags.firedReleasedEventEvent.uri, 'fired event had a uri');
             ok(txCache.getItem(uri).readyState === CacheItem.GONE, 'no longer stored');
             start();
         });
@@ -292,7 +292,7 @@ context('Online Transaction', function() {
     var body = 'Hello, World!';
 
     should('work asynchronously', function() {
-        stop();
+        stop(); expect(11);
 
         var flags = {}
         basicEventChecker('updating', flags, 'firedUpdatingEvent');
@@ -302,7 +302,7 @@ context('Online Transaction', function() {
         var cache = window.openDataCache();
         var txCache = null;
         cache.transaction(function(tx) {
-            ok(!tx.offline);
+            ok(!tx.offline, 'transaction is online');
             tx.capture(uri);
             try { tx.getItem("DOESNOTEXIST", function() {}); }
             catch (e) { flags.exceptionNotFound = true; }
@@ -314,22 +314,22 @@ context('Online Transaction', function() {
         });
 
         setTimeout(function() {
-            ok(flags.firedUpdatingEvent);
-            ok(!!flags.firedUpdatingEventEvent.cache);
-            ok(flags.firedUpdatingEventEvent.uri === null);
-            ok(flags.firedFetchingEvent);
-            ok(!!flags.firedFetchingEventEvent.cache);
-            ok(!!flags.firedFetchingEventEvent.uri);
-            ok(flags.exceptionNotFound);
-            ok(flags.calledItemCallback);
-            ok(itemCallbackState === CacheItem.FETCHING);
-            ok(txCache.getItem(uri).body === body);
+            ok(flags.firedUpdatingEvent, 'fired updating event');
+            ok(!!flags.firedUpdatingEventEvent.cache, 'fired event had a cache');
+            ok(flags.firedUpdatingEventEvent.uri === null, 'fired event did not have a uri');
+            ok(flags.firedFetchingEvent, 'fired fetching event');
+            ok(!!flags.firedFetchingEventEvent.cache, 'fired event had a cache');
+            ok(!!flags.firedFetchingEventEvent.uri, 'fired event had a uri');
+            ok(flags.exceptionNotFound, 'throws exception on getItem on no exist');
+            ok(flags.calledItemCallback, 'called item callback');
+            ok(itemCallbackState === CacheItem.FETCHING, 'status of the resource is fetching');
+            ok(txCache.getItem(uri).body === body, 'proper data');
             start();
         }, LATENCY);
     });
 
     should('work synchronously', function() {
-        stop();
+        stop(); expect(12);
 
         var flags = {}
         basicEventChecker('updating', flags, 'firedUpdatingEvent');
@@ -347,18 +347,19 @@ context('Online Transaction', function() {
         tx.capture(uri);
 
         setTimeout(function() {
-            ok(flags.firedUpdatingEvent);
-            ok(!!flags.firedUpdatingEventEvent.cache);
-            ok(flags.firedUpdatingEventEvent.uri === null);
-            ok(flags.firedFetchingEvent);
-            ok(!!flags.firedFetchingEventEvent.cache);
-            ok(!!flags.firedFetchingEventEvent.uri);
-            ok(flags.calledItemCallback);
-            ok(itemCallbackState === CacheItem.CACHED);
-            ok(itemCallbackData === body);
+            ok(flags.firedUpdatingEvent, 'fired updating event');
+            ok(!!flags.firedUpdatingEventEvent.cache, 'fired event had a cache');
+            ok(flags.firedUpdatingEventEvent.uri === null, 'fired event did not have a uri');
+            ok(flags.firedFetchingEvent, 'fired fetching event');
+            ok(!!flags.firedFetchingEventEvent.cache, 'fired event had a cache');
+            ok(!!flags.firedFetchingEventEvent.uri, 'fired event had a uri');
+            ok(flags.calledItemCallback, 'called item callback');
+            ok(itemCallbackState === CacheItem.CACHED, 'status of the resource is catched');
+            ok(itemCallbackData === body, 'proper data in the item callback');
+
             var item = tx.cache.getItem(uri);
-            ok(item.body === body);
-            ok(item.readyState === CacheItem.CACHED);
+            ok(item.body === body, 'proper data when pulled from a transaction');
+            ok(item.readyState === CacheItem.CACHED, 'proper state when pulled from a transaction');
             start();
         }, LATENCY);
     });
@@ -366,11 +367,11 @@ context('Online Transaction', function() {
     should('have the same resources as the last online', function() {
         var cache = window.openDataCache();
         var tx = cache.transactionSync();
-        ok(tx.cache.getItem(uri).body === body);
+        ok(tx.cache.getItem(uri).body === body, 'proper data');
     });
 
     should('release a resource', function() {
-        stop();
+        stop(); expect(2);
 
         var flags = {};
         basicEventChecker('released', flags, 'firedReleasedEvent');
@@ -380,14 +381,14 @@ context('Online Transaction', function() {
         tx.release(uri);
 
         setTimeout(function() {
-            ok(flags.firedReleasedEvent, 'did fire');
-            ok(tx.cache.getItem(uri).readyState === CacheItem.GONE);
+            ok(flags.firedReleasedEvent, 'fired released event');
+            ok(tx.cache.getItem(uri).readyState === CacheItem.GONE, 'item was released');
             start();
         });
     });
 
     should('be aborted', function() {
-       stop();
+       stop(); expect(2);
 
        var flags = {};
        basicEventChecker('error', flags, 'firedErrorEvent');
@@ -397,14 +398,14 @@ context('Online Transaction', function() {
        tx.abort();
 
        setTimeout(function() {
-           ok(flags.firedErrorEvent, 'did fire');
-           ok(tx.status === CacheTransaction.ABORTED);
+           ok(flags.firedErrorEvent, 'fired abort event');
+           ok(tx.status === CacheTransaction.ABORTED, 'transaction was marked as aborted');
            start();
        });
     });
 
     should('trigger errorCallback', function() {
-        stop();
+        stop(); expect(1);
 
         var calledErrorCallback = false;
         var cache = window.openDataCache();
@@ -414,13 +415,13 @@ context('Online Transaction', function() {
         );
 
         setTimeout(function() {
-            ok(calledErrorCallback, 'did fire errorCallback');
+            ok(calledErrorCallback, 'called error callback on transaction error');
             start();
         }, LATENCY);
     });
 
     should('trigger oncommitted after a commit (async)', function() {
-        stop();
+        stop(); expect(1);
 
         var calledOncommitted = false;
         var cache = window.openDataCache();
@@ -430,13 +431,13 @@ context('Online Transaction', function() {
         });
 
         setTimeout(function() {
-            ok(calledOncommitted, 'did fire oncommitted');
+            ok(calledOncommitted, 'fire oncommitted function on transaction commit');
             start();
         }, LATENCY);
     });
 
     should('trigger oncommitted after a commit (sync)', function() {
-        stop();
+        stop(); expect(1);
 
         var calledOncommitted = false;
         var cache = window.openDataCache();
@@ -445,7 +446,7 @@ context('Online Transaction', function() {
         tx.commit();
 
         setTimeout(function() {
-            ok(calledOncommitted, 'did fire oncommitted');
+            ok(calledOncommitted, 'fire oncommitted function on transaction commit');
             start();
         }, LATENCY);
     });
@@ -454,7 +455,7 @@ context('Online Transaction', function() {
 
 context('DataCache eachModificationSince', function() {
     should('return all cached files', function() {
-        stop();
+        stop(); expect(5);
 
         // Counters / Test States
         var itemCb1 = 0;
@@ -507,11 +508,11 @@ context('DataCache eachModificationSince', function() {
         }, LATENCY);
 
         setTimeout(function() {
-            ok(itemCb1 === 3);
-            ok(itemCb2 > 3);
-            ok(deletedCount === 1);
-            ok(calledSuccessCallback1);
-            ok(calledSuccessCallback2);
+            ok(itemCb1 === 3, 'item callback 1 called ' + itemCb1 + ' times');
+            ok(itemCb2 > 3, 'item callback 2 called ' + itemCb2 + ' times');
+            ok(deletedCount === 1, 'delete count was 1');
+            ok(calledSuccessCallback1, 'called the success callback');
+            ok(calledSuccessCallback2, 'called the success callback');
             start();
         }, LATENCY*2);
     });
@@ -520,7 +521,7 @@ context('DataCache eachModificationSince', function() {
 
 context('Local Server', function() {
     should('return dynamic intercepted representations', function() {
-        stop();
+        stop(); expect(8);
 
         DataCache.Offline = true;
 
@@ -568,14 +569,14 @@ context('Local Server', function() {
 
         setTimeout(function() {
             navigator.removeRegisteredOfflineHandlers();
-            ok(interceptorCalled);
-            ok(!reviewerCalled);
+            ok(interceptorCalled, 'called the interceptor');
+            ok(!reviewerCalled, 'did not call the reviewer');
             start();
         }, LATENCY);
     });
 
     should('return dynamic reviewed representations', function() {
-        stop();
+        stop(); expect(8);
 
         DataCache.Offline = false;
 
@@ -618,17 +619,62 @@ context('Local Server', function() {
 
         setTimeout(function() {
             navigator.removeRegisteredOfflineHandlers();
-            ok(!interceptorCalled);
-            ok(reviewerCalled);
+            ok(!interceptorCalled, 'did not call the interceptor');
+            ok(reviewerCalled, 'called the reviewer');
             start();
         }, LATENCY);
+    });
+
+    should('use the most specific interceptor', function() {
+        stop(); expect(3);
+
+        DataCache.Offline = true;
+        var uri = 'foo/bar/baz.txt';
+        var method = 'GET';
+        var cache = window.openDataCache();
+        cache.offlineTransaction(function(tx) {
+            tx.capture(uri, '-', null, [method]);
+        });
+
+        var verified = false;
+        var badHandlerFired = false;
+        var goodHandlerFired = false;
+
+        function badHandler() { badHandlerFired = true; }
+        function goodHandler(r,m) {
+            goodHandlerFired = true;
+            m.setStatus(200, '-');
+            m.send();
+        }
+
+        function verify() {
+            if (xhr.readyState === 4)
+                verified = (xhr.status === 200);
+        }
+
+        navigator.registerOfflineHandler('', badHandler);
+        navigator.registerOfflineHandler('foo', badHandler);
+        navigator.registerOfflineHandler('foo/bar', goodHandler);
+
+        var xhr = new InterceptableXMLHttpRequest();
+        xhr.open(method, uri);
+        xhr.onreadystatechange = verify;
+        xhr.send();
+
+        setTimeout(function() {
+            navigator.removeRegisteredOfflineHandlers();
+            ok(goodHandlerFired, 'good handler fired');
+            ok(!badHandlerFired, 'bad handler was not fired');
+            ok(verified, 'verified');
+            start();
+        });
     });
 });
 
 
 context('[*] LocalServer', function() {
     should('bypass with X-Bypass-DataCache header', function() {
-        stop();
+        stop(); expect(5);
 
         DataCache.Offline = true;
 
@@ -645,9 +691,9 @@ context('[*] LocalServer', function() {
 
         function verify() {
             if (xhr.readyState === 4) {
-                ok(xhr.status === 200);
-                ok(xhr.statusText === Http.Status[200]);
-                ok(xhr.responseText === body);
+                ok(xhr.status === 200, 'proper data');
+                ok(xhr.statusText === Http.Status[200], 'proper data');
+                ok(xhr.responseText === body, 'proper data');
             }
         }
 
@@ -663,8 +709,8 @@ context('[*] LocalServer', function() {
 
         setTimeout(function() {
             navigator.removeRegisteredOfflineHandlers();
-            ok(!interceptorCalled);
-            ok(!reviewerCalled);
+            ok(!interceptorCalled, 'interceptor was not called');
+            ok(!reviewerCalled, 'reviewer was not called');
             start();
         }, LATENCY);
     });
@@ -674,7 +720,7 @@ context('[*] LocalServer', function() {
 context('[*] Online Transaction with 4xx or 5xx error', function() {
     var uri = 'code.php?code=500';
     should('fire error event', function() {
-        stop();
+        stop(); expect(1);
 
         var flags = {};
         basicEventChecker('error', flags, 'firedErrorEvent');
@@ -685,7 +731,7 @@ context('[*] Online Transaction with 4xx or 5xx error', function() {
         });
 
         setTimeout(function() {
-            ok(flags.firedErrorEvent, "did fire");
+            ok(flags.firedErrorEvent, "fired error event");
             start();
         }, LATENCY);
     });
@@ -697,7 +743,7 @@ context('[*] Online Transaction with 401', function() {
     var cache = window.openDataCache();
 
     should('make fire obsolete event and make obsolete', function() {
-        stop();
+        stop(); expect(4);
 
         var flags = {};
         basicEventChecker('obsolete', flags, 'firedObsoleteEvent');
@@ -707,9 +753,9 @@ context('[*] Online Transaction with 401', function() {
         });
 
         setTimeout(function() {
-            ok(flags.firedObsoleteEvent, "did fire");
-            ok(!!flags.firedObsoleteEventEvent.cache);
-            ok(flags.firedObsoleteEventEvent.uri === null);
+            ok(flags.firedObsoleteEvent, "fired obsolete event");
+            ok(!!flags.firedObsoleteEventEvent.cache, 'fired event had a cache');
+            ok(flags.firedObsoleteEventEvent.uri === null, 'fired event had no uri');
             ok(cache.group.status === DataCache.OBSOLETE, "group became obsolete");
             start();
         }, LATENCY);

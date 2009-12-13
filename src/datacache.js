@@ -395,7 +395,7 @@ OnlineTransaction.prototype = {
     },
 
     _captureSuccess: function(xhr, uri, methods) {
-        console.log('success', xhr);
+        // console.log('success', xhr);
         var body = xhr.responseText; // FIXME: binary?
         var type = xhr.getResponseHeader('Content-Type'); // FIXME: determine from filetype as well?
         var headers = DataCache.parseHeaders(xhr.getAllResponseHeaders());
@@ -405,7 +405,7 @@ OnlineTransaction.prototype = {
     },
 
     _captureFailure: function(xhr) {
-        console.log('failure', xhr);
+        // console.log('failure', xhr);
         this.cache.group.remove(this.cache);
         this.status = CacheTransaction.ABORT;
         if (xhr.status !== 401) {
@@ -712,6 +712,10 @@ CacheEvent.prototype = {
                 return mutableResponse;
             }
 
+            // States
+            var self = this;
+            var oldReadyStateHandler = ixhr.onreadystatechange;
+
             // We are Offline right now
             if (DataCache.Offline)
                 return handleWhenOffline();
@@ -723,7 +727,7 @@ CacheEvent.prototype = {
                 xhr.abort();
                 DataCache.Offline = true;
                 var mutableResponse = handleWhenOffline();
-                xhr.onreadystatechange = oldReadyStateHandler;
+                ixhr.onreadystatechange = oldReadyStateHandler;
                 ixhr.handleHttpResponse(mutableResponse);
             }, DataCache.TimeoutDuration);
 
@@ -736,8 +740,6 @@ CacheEvent.prototype = {
 
             // We will need to issue the XHR on our own
             // with our own handlers to monitor the progress.
-            var self = this;
-            var oldReadyStateHandler = xhr.onreadystatechange;
             function readyStateHandler() {
                 if (xhr.readyState === 4) {
                     if (ABORTED)
@@ -747,13 +749,14 @@ CacheEvent.prototype = {
                     DataCache.Offline = false;
                     var response = self.httpResponseFromXhr(xhr);
                     server.reviewer(request, response);
-                    xhr.onreadystatechange = oldReadyStateHandler;
+                    ixhr.onreadystatechange = oldReadyStateHandler;
                     ixhr.handleHttpResponse(response);
                 }
             }
 
             // We are handling it asynchronously
-            xhr.onreadystatechange = readyStateHandler;
+            ixhr.onreadystatechange = readyStateHandler;
+            xhr.onreadystatechange = ixhr._generateReadyStateHandler();
             xhr.send(data);
             return true;
         },
@@ -1061,6 +1064,12 @@ function InterceptableXMLHttpRequest() {
     this._handled = false;
     this._headers = {};
 
+    // Firefox does not allow direct wrapping of these getters/setters
+    // So we may have to apply them directly to the xhr.
+    // Unfortunately this is a very dirty hack.
+    this._events = ['onload', 'onerror', 'onloadstart', 'onabort', 'onprogress'];
+    this._getters = ['status', 'readyState', 'responseXML', 'responseText', 'statusText'];
+
     // Generate functions with non-closured values
     function genericApply(func) { return function() { return xhr[func].apply(xhr, arguments); } };
     function createGetter(func) { return function() { return xhr[func]; } };
@@ -1074,9 +1083,11 @@ function InterceptableXMLHttpRequest() {
     for (var func in this.xhr) {
         if (!this.xhr.hasOwnProperty(func))
             continue;
+        if (func.indexOf("on") === 0)
+            continue;
 
         if (exceptions.indexOf(func) === -1) {
-            if (getters.indexOf(func) !== -1 || func.indexOf("on") === 0) {
+            if (getters.indexOf(func) !== -1) {
                 this.__defineGetter__(func, createGetter(func));
                 this.__defineSetter__(func, createSetter(func));
             } else {
@@ -1084,7 +1095,6 @@ function InterceptableXMLHttpRequest() {
             }
         }
     }
-
 };
 
 InterceptableXMLHttpRequest.prototype = {
@@ -1099,6 +1109,7 @@ InterceptableXMLHttpRequest.prototype = {
 
     send: function(data) {
         var self = this;
+        var outerArguments;
         function action() {
 
             // Inject our own Network logic
@@ -1119,14 +1130,39 @@ InterceptableXMLHttpRequest.prototype = {
                 return;
             }
 
-            // pass through
-            self.xhr.send.apply(self.xhr, arguments);
+            // Modified pass through
+            self.xhr.onreadystatechange = self._generateReadyStateHandler();
+            self.xhr.send.apply(self.xhr, outerArguments);
         }
 
         if (this._async)
             setTimeout(action, 0);
         else
             action();
+    },
+
+    _generateReadyStateHandler: function() {
+        var self = this;
+        return function handler() {
+            self._applyDelegates();
+            self.xhr.onreadystatechange = handler;
+            self.onreadystatechange.apply(self, arguments);
+        }
+    },
+
+    _applyDelegates: function() {
+        var self = this;
+        function createDelegate(e) { return function() { self[e].apply(self, arguments); } }
+        for (var i=0, len=this._events.length; i<len; ++i) {
+            var e = this._events[i];
+            this[e] = this[e] || function() {};
+            this.xhr[e] = createDelegate(e);
+        }
+
+        for (var i=0, len=this._getters.length; i<len; ++i) {
+            var g = this._getters[i];
+            this[g] = this.xhr[g];
+        }
     },
 
     handleHttpResponse: function(response) {

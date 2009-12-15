@@ -50,11 +50,10 @@ context('Non Captured Resource', function() {
 
         // Verification of Data Returned from Cache
         function verify() {
-            console.log('verify', xhr.readyState);
             if (xhr.readyState !== 4)
                 return;
 
-            addToOrder(3, 'onreadystate');
+            addToOrder(3, 'onload');
             ok(xhr.status === 200 || xhr.status === 0);
             ok(xhr.responseText === dataFileText);
         }

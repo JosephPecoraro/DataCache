@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Twitter Notes</title>
+  <link rel="stylesheet" href="css/styles.css" type="text/css" />
+</head>
+<body>
+  <div id="title">
+    <h1>Twitter Notes</h1>
+  </div>
+  <div id="content">
+
+    <div id="sidebar">
+      <ul>
+        <li><a class="button" href="#" onclick="TwitterBox.createBox();"><span>Create</span></a></li>
+        <li><a class="button" href="#" onclick="alert('Does nothing');"><span>Logout</span></a></li>
+      </ul>
+    </div>
+
+    <!-- This is what a box looks like...
+    <div class="box" style="left:245px; top:53px;">
+      <div class="menubar"><ul><li>X</li></ul></div>
+      <h3>Blah blah.</h3>
+      <span class="counter">9</span>
+      <p>
+        Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod
+        tempor incididunt ut labore et dolore magna aliqua.
+      </p>
+    </div>
+    -->
+
+  </div>
+
+  <!-- Object Library -->
+  <script src="js/TwitterBox.js" type="text/javascript"></script>
+  <script type="text/javascript">
+  
+    // Get the state of the page
+    
+  
+    TwitterBox.createBox();
+    TwitterBox.createBox();
+    var b = TwitterBox.createBox();
+    
+    console.log(b.toJSONString());
+  </script>
+</body>
+</html>

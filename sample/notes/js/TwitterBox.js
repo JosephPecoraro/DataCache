@@ -95,7 +95,7 @@ function TwitterBox(id, x, y, z, timestamp, content) {
     this.z = z;
 
     // Optional
-    this.timestamp = timestamp || +(new Date());
+    this.timestamp = timestamp || +new Date;
     content = content || '...';
 
     // UI listeners
@@ -147,14 +147,12 @@ TwitterBox.prototype = {
         this.boxElement.style.top = y+'px';
         this.boxElement.style.zIndex = z;
         this._updated();
-        this.dispatchEvent('updated', null, this.toJSONObject());
     },
     
     setText: function(txt) {
         this.bodyElement.textContent = txt;
         this.updateCount();
         this._updated();
-        this.dispatchEvent('updated', null, this.toJSONObject());
     },
 
     hide: function() {
@@ -170,7 +168,6 @@ TwitterBox.prototype = {
 
     dispose: function() {
         this._deleted();
-        this.dispatchEvent('deleted', null, this.toJSONObject());
         this.boxElement.parentNode.removeChild(this.boxElement);
     },
 
@@ -195,12 +192,13 @@ TwitterBox.prototype = {
     },
     
     _sendData: function(method, page) {
+        this.timestamp = +new Date;
         var xhr = new XMLHttpRequest();
         xhr.open(method, page);
         var data = 'data=' + encodeURIComponent(this.toJSONString());
         xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
-        xhr.onload = function() { console.log('success', xhr); }
-        xhr.onerror = function() { console.log('error', xhr); }
+        xhr.onload = function() { console.log('success', xhr, xhr.responseText); }
+        xhr.onerror = function() { console.log('error', xhr, xhr.responseText); }
         xhr.send(data);  
     },
 
@@ -212,11 +210,13 @@ TwitterBox.prototype = {
     _deleted: function() {
         console.log('_deleted');
         this._sendData('DELETE', 'update.php');
+        this.dispatchEvent('deleted', null, this.toJSONObject());
     },
 
     _updated: function() {
         console.log('_updated');
         this._sendData('PUT', 'update.php');
+        this.dispatchEvent('updated', null, this.toJSONObject());
     },
 
     mousedown: function(event) {
@@ -246,6 +246,7 @@ TwitterBox.prototype = {
             var offsetY = event.clientY - startY;
             self.x = (self.x+offsetX);
             self.y = (self.y+offsetY);
+            self._updated();
         }
     },
 
@@ -259,7 +260,6 @@ TwitterBox.prototype = {
         // ---------
 
         var self = this;
-        var shouldUpdateCount = (elem === this.bodyElement);
         var oldText = elem.textContent;
         addClassName(elem, 'editing');
         elem.contentEditable = 'true';
@@ -287,12 +287,14 @@ TwitterBox.prototype = {
         }
 
         function keyupHandler(event) {
-            if (shouldUpdateCount)
-                self.updateCount();
+            self.updateCount();
         }
 
         function blurHandler(event) {
-            commit();
+            if (self.bodyElement.textContent === oldText)
+                cancel();
+            else
+                commit();
         }
 
         // --------------
@@ -306,14 +308,12 @@ TwitterBox.prototype = {
             elem.removeEventListener('keyup', keyupHandler, false);
             elem.removeEventListener('blur', blurHandler, false);
             elem.blur();
-            if (shouldUpdateCount)
-                self.updateCount();
+            self.updateCount();
         }
 
         function commit() {
             cleanup();
             self._updated();
-            self.dispatchEvent('updated', null, self.toJSONObject());
         }
 
         function cancel() {

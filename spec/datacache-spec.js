@@ -29,8 +29,8 @@ context('Basics', function() {
 
     should('have constants', function() {
         ok(typeof DataCache.IDLE === 'number', 'DataCache.IDLE exists');
-        ok(typeof DataCache.READY === 'number', 'DataCache.IDLE exists');
-        ok(typeof DataCache.OBSOLETE === 'number', 'DataCache.IDLE exists');
+        ok(typeof DataCache.READY === 'number', 'DataCache.READY exists');
+        ok(typeof DataCache.OBSOLETE === 'number', 'DataCache.OBSOLETE exists');
     });
 });
 

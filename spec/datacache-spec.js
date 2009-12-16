@@ -562,7 +562,7 @@ context('Local Server', function() {
 
         navigator.registerOfflineHandler(uri, interceptor, reviewer);
 
-        var xhr = new InterceptableXMLHttpRequest();
+        var xhr = new XMLHttpRequest();
         xhr.open(method, uri);
         xhr.onreadystatechange = verify;
         xhr.send();
@@ -612,7 +612,7 @@ context('Local Server', function() {
 
         navigator.registerOfflineHandler(uri, interceptor, reviewer);
 
-        var xhr = new InterceptableXMLHttpRequest();
+        var xhr = new XMLHttpRequest();
         xhr.open(method, uri);
         xhr.onreadystatechange = verify;
         xhr.send();
@@ -656,7 +656,7 @@ context('Local Server', function() {
         navigator.registerOfflineHandler('foo', badHandler);
         navigator.registerOfflineHandler('foo/bar', goodHandler);
 
-        var xhr = new InterceptableXMLHttpRequest();
+        var xhr = new XMLHttpRequest();
         xhr.open(method, uri);
         xhr.onreadystatechange = verify;
         xhr.send();
@@ -701,7 +701,7 @@ context('[*] LocalServer', function() {
         function reviewer() { reviewerCalled = true; }
         navigator.registerOfflineHandler(uri, interceptor, reviewer);
 
-        var xhr = new InterceptableXMLHttpRequest();
+        var xhr = new XMLHttpRequest();
         xhr.open(method, uri);
         xhr.setRequestHeader('X-Bypass-DataCache', 'true');
         xhr.onreadystatechange = verify;

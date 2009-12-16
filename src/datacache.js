@@ -377,7 +377,7 @@ OnlineTransaction.prototype = {
         this.cache.group.host.queueTask('fetching', this.cache, uri);
 
         var self = this;
-        var xhr = new XMLHttpRequest();
+        var xhr = new _XMLHttpRequest();
         xhr.open("GET", uri); // asynchronous
         xhr.onreadystatechange = function() {
             // Workaround for local file XHRs
@@ -1042,175 +1042,179 @@ CacheEvent.prototype = {
         DataCache.GlobalHost._servers = [];
     }
 
+
+    // -------------------------------
+    //   InterceptableXMLHttpRequest
+    // -------------------------------
+    // NOTE: Possible Solution
+    // Overwrite Default XMLHttpRequest behavior through
+    // monkey patching, to sneak information? Might be
+    // more future proof.
+
+    var _XMLHttpRequest = window.XMLHttpRequest;
+
+    function InterceptableXMLHttpRequest() {
+
+        // Internal request and values
+        var xhr = this.xhr = new _XMLHttpRequest();
+
+        // Internal State
+        this._handled = false;
+        this._headers = {};
+
+        // Firefox does not allow direct wrapping of these getters/setters
+        // So we may have to apply them directly to the xhr.
+        // Unfortunately this is a very dirty hack.
+        this._events = ['onload', 'onerror', 'onloadstart', 'onabort', 'onprogress'];
+
+        // Generate functions with non-closured values
+        function genericApply(func) { return function() { return xhr[func].apply(xhr, arguments); } };
+        function createGetter(func) { return function() { return xhr[func]; } };
+        function createSetter(func) { return function(handler) { xhr[func] = handler; } };
+
+        // Pass through Interface, with the exception of some
+        // NOTE: Getters / Setters need special handling
+        var exceptions = ['open', 'send', 'setRequestHeader', 'getAllResponseHeaders', 'getResponseHeader'];
+        var getters = ['status', 'readyState', 'responseXML', 'responseText', 'statusText'];
+
+        for (var func in this.xhr) {
+            if (!this.xhr.hasOwnProperty(func))
+                continue;
+            if (func.indexOf("on") === 0)
+                continue;
+
+            if (exceptions.indexOf(func) === -1) {
+                if (this._getters.indexOf(func) !== -1) {
+                    this.__defineGetter__(func, createGetter(func));
+                    this.__defineSetter__(func, createSetter(func));
+                } else {
+                    this[func] = genericApply(func);
+                }
+            }
+        }
+    };
+
+    InterceptableXMLHttpRequest.prototype = {
+        open: function(method, uri, async) {
+            this._method = method;
+            this._uri = uri;
+            this._async = (async !== false);
+
+            // pass through
+            this.xhr.open.apply(this.xhr, arguments);
+        },
+
+        send: function(data) {
+            var self = this;
+            var outerArguments;
+            function action() {
+
+                // Inject our own Network logic
+                var response = DataCache.GlobalHost.handleRequest(self, self._method, self._uri, data, self._headers, self._async);
+                delete self._headers;
+                delete self._method;
+                delete self._async;
+                delete self._uri;
+
+                // Response may be:
+                //   true:         handled asynchronously
+                //   HttpResponse: was handled and here is the result
+                //   false:        was not handled (pass through)
+                if (response === true)
+                    return;
+                if (response) {
+                    self.handleHttpResponse(response);
+                    return;
+                }
+
+                // Modified pass through
+                self.xhr.onreadystatechange = self._generateReadyStateHandler();
+                self.xhr.send.apply(self.xhr, outerArguments);
+            }
+
+            if (this._async)
+                setTimeout(action, 0);
+            else
+                action();
+        },
+
+        _generateReadyStateHandler: function() {
+            var self = this;
+            return function handler() {
+                self._applyDelegates();
+                self.xhr.onreadystatechange = handler;
+                if (self.onreadystatechange)
+                    self.onreadystatechange.apply(self, arguments);
+            }
+        },
+
+        _applyDelegates: function() {
+            var self = this;
+            function createDelegate(e) { return function() { self[e].apply(self, arguments); } }
+            for (var i=0, len=this._events.length; i<len; ++i) {
+                var e = this._events[i];
+                this[e] = this[e] || function() {};
+                this.xhr[e] = createDelegate(e);
+            }
+
+            for (var i=0, len=this._getters.length; i<len; ++i) {
+                var g = this._getters[i];
+                this[g] = this.xhr[g];
+            }
+        },
+
+        handleHttpResponse: function(response) {
+            delete this.status;
+            delete this.statusText;
+            delete this.readyState;
+            delete this.responseText;
+
+            this._handled = true;
+            this._headers = response.headers;
+
+            var sanitizedStatusText = response.statusMessage;
+            var match = sanitizedStatusText.match(/^HTTP.*?\s+/);
+            if (match)
+                sanitizedStatusText = sanitizedStatusText.substring(match[0].length);
+
+            this.status = response.statusCode;
+            this.statusText = sanitizedStatusText;
+            this.readyState = 4; // success
+            this.responseText = response.bodyText;
+            if (this.onreadystatechange)
+                this.onreadystatechange(null);
+            if (this.onload)
+                this.onload(null);
+        },
+
+        getAllResponseHeaders: function() {
+            if (this._handled)
+                return this._headersAsString();
+            return this.xhr.getAllResponseHeaders.apply(this.xhr, arguments);
+        },
+
+        getResponseHeader: function(name) {
+            if (this._handled)
+                return this._headers[name];
+            return this.xhr.getResponseHeader.apply(this.xhr, arguments);
+        },
+
+        setRequestHeader: function(name, value) {
+            this._headers[name] = value;
+            this.xhr.setRequestHeader.apply(this.xhr, arguments);
+        },
+
+        _headersAsString: function() {
+            var arr = [];
+            for (var name in this._headers)
+                arr.push(name + ': ' + this._headers[name]);
+            return arr.join("\n");
+        }
+    }
+
+    // Override the defaults
+    window.InterceptableXMLHttpRequest = InterceptableXMLHttpRequest;
+    window.XMLHttpRequest = InterceptableXMLHttpRequest;
+    window._XMLHttpRequest = _XMLHttpRequest;
+
 })();
-
-
-/*
- * FIXME: Possible Solution
- * Overwrite Default XMLHttpRequest behavior through
- * monkey patching, to sneak information?
- */
-
-// -------------------------------
-//   InterceptableXMLHttpRequest
-// -------------------------------
-
-function InterceptableXMLHttpRequest() {
-
-    // Internal request and values
-    var xhr = this.xhr = new XMLHttpRequest();
-
-    // Internal State
-    this._handled = false;
-    this._headers = {};
-
-    // Firefox does not allow direct wrapping of these getters/setters
-    // So we may have to apply them directly to the xhr.
-    // Unfortunately this is a very dirty hack.
-    this._events = ['onload', 'onerror', 'onloadstart', 'onabort', 'onprogress'];
-    this._getters = ['status', 'readyState', 'responseXML', 'responseText', 'statusText'];
-
-    // Generate functions with non-closured values
-    function genericApply(func) { return function() { return xhr[func].apply(xhr, arguments); } };
-    function createGetter(func) { return function() { return xhr[func]; } };
-    function createSetter(func) { return function(handler) { xhr[func] = handler; } };
-
-    // Pass through Interface, with the exception of some
-    // NOTE: Getters / Setters need special handling
-    var exceptions = ['open', 'send', 'setRequestHeader', 'getAllResponseHeaders', 'getResponseHeader'];
-    var getters = ['status', 'readyState', 'responseXML', 'responseText', 'statusText'];
-
-    for (var func in this.xhr) {
-        if (!this.xhr.hasOwnProperty(func))
-            continue;
-        if (func.indexOf("on") === 0)
-            continue;
-
-        if (exceptions.indexOf(func) === -1) {
-            if (getters.indexOf(func) !== -1) {
-                this.__defineGetter__(func, createGetter(func));
-                this.__defineSetter__(func, createSetter(func));
-            } else {
-                this[func] = genericApply(func);
-            }
-        }
-    }
-};
-
-InterceptableXMLHttpRequest.prototype = {
-    open: function(method, uri, async) {
-        this._method = method;
-        this._uri = uri;
-        this._async = (async !== false);
-
-        // pass through
-        this.xhr.open.apply(this.xhr, arguments);
-    },
-
-    send: function(data) {
-        var self = this;
-        var outerArguments;
-        function action() {
-
-            // Inject our own Network logic
-            var response = DataCache.GlobalHost.handleRequest(self, self._method, self._uri, data, self._headers, self._async);
-            delete self._headers;
-            delete self._method;
-            delete self._async;
-            delete self._uri;
-
-            // Response may be:
-            //   true:         handled asynchronously
-            //   HttpResponse: was handled and here is the result
-            //   false:        was not handled (pass through)
-            if (response === true)
-                return;
-            if (response) {
-                self.handleHttpResponse(response);
-                return;
-            }
-
-            // Modified pass through
-            self.xhr.onreadystatechange = self._generateReadyStateHandler();
-            self.xhr.send.apply(self.xhr, outerArguments);
-        }
-
-        if (this._async)
-            setTimeout(action, 0);
-        else
-            action();
-    },
-
-    _generateReadyStateHandler: function() {
-        var self = this;
-        return function handler() {
-            self._applyDelegates();
-            self.xhr.onreadystatechange = handler;
-            if (self.onreadystatechange)
-                self.onreadystatechange.apply(self, arguments);
-        }
-    },
-
-    _applyDelegates: function() {
-        var self = this;
-        function createDelegate(e) { return function() { self[e].apply(self, arguments); } }
-        for (var i=0, len=this._events.length; i<len; ++i) {
-            var e = this._events[i];
-            this[e] = this[e] || function() {};
-            this.xhr[e] = createDelegate(e);
-        }
-
-        for (var i=0, len=this._getters.length; i<len; ++i) {
-            var g = this._getters[i];
-            this[g] = this.xhr[g];
-        }
-    },
-
-    handleHttpResponse: function(response) {
-        delete this.status;
-        delete this.statusText;
-        delete this.readyState;
-        delete this.responseText;
-
-        this._handled = true;
-        this._headers = response.headers;
-
-        var sanitizedStatusText = response.statusMessage;
-        var match = sanitizedStatusText.match(/^HTTP.*?\s+/);
-        if (match)
-            sanitizedStatusText = sanitizedStatusText.substring(match[0].length);
-
-        this.status = response.statusCode;
-        this.statusText = sanitizedStatusText;
-        this.readyState = 4; // success
-        this.responseText = response.bodyText;
-        if (this.onreadystatechange)
-            this.onreadystatechange(null);
-        if (this.onload)
-            this.onload(null);
-    },
-
-    getAllResponseHeaders: function() {
-        if (this._handled)
-            return this._headersAsString();
-        return this.xhr.getAllResponseHeaders.apply(this.xhr, arguments);
-    },
-
-    getResponseHeader: function(name) {
-        if (this._handled)
-            return this._headers[name];
-        return this.xhr.getResponseHeader.apply(this.xhr, arguments);
-    },
-
-    setRequestHeader: function(name, value) {
-        this._headers[name] = value;
-        this.xhr.setRequestHeader.apply(this.xhr, arguments);
-    },
-
-    _headersAsString: function() {
-        var arr = [];
-        for (var name in this._headers)
-            arr.push(name + ': ' + this._headers[name]);
-        return arr.join("\n");
-    }
-}

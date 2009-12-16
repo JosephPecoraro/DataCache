@@ -59,7 +59,7 @@ context('Non Captured Resource', function() {
         }
 
         // Response with that Resource Automatically, without going to the wire
-        var xhr = new InterceptableXMLHttpRequest();
+        var xhr = new XMLHttpRequest();
         xhr.open('GET', dataFileURI);
         xhr.onload = verify;
         xhr.send();

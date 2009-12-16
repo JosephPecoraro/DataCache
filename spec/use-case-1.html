@@ -60,7 +60,7 @@ context('Offline Capture a Resource', function() {
         }
 
         // Response with that Resource Automatically, without going to the wire
-        var xhr = new InterceptableXMLHttpRequest();
+        var xhr = new XMLHttpRequest();
         xhr.open('GET', uri);
         xhr.onreadystatechange = verify;
         xhr.send();

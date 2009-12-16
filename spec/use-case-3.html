@@ -71,7 +71,7 @@ context('DataCache Library', function() {
         //   - xhr will Timeout
         //   - library will transition to Offline
         //   - library will handle the original request
-        var xhr = new InterceptableXMLHttpRequest();
+        var xhr = new XMLHttpRequest();
         xhr.open('GET', uri);
         xhr.onreadystatechange = verify;
         xhr.send();

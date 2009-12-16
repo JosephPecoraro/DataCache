@@ -62,7 +62,7 @@ context('DataCache Library', function() {
             ok(xhr.responseText === data);
         }
 
-        var xhr = new InterceptableXMLHttpRequest();
+        var xhr = new XMLHttpRequest();
         xhr.open(method, uri);
         xhr.onload = verify;
         xhr.send(data);

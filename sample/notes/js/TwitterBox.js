@@ -194,7 +194,7 @@ TwitterBox.prototype = {
     _sendData: function(method, page) {
         this.timestamp = +new Date;
         var xhr = new XMLHttpRequest();
-        xhr.open(method, page);
+        xhr.open(method, page, true);
         var data = 'data=' + encodeURIComponent(this.toJSONString());
         xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
         xhr.onload = function() { console.log('success', xhr, xhr.responseText); }
@@ -204,18 +204,18 @@ TwitterBox.prototype = {
 
     _created: function() {
         console.log('_created');
-        this._sendData('POST', 'update.php');
+        this._sendData('POST', 'api/');
     },
 
     _deleted: function() {
         console.log('_deleted');
-        this._sendData('DELETE', 'update.php');
+        this._sendData('DELETE', 'api/');
         this.dispatchEvent('deleted', null, this.toJSONObject());
     },
 
     _updated: function() {
         console.log('_updated');
-        this._sendData('PUT', 'update.php');
+        this._sendData('PUT', 'api/');
         this.dispatchEvent('updated', null, this.toJSONObject());
     },
 
@@ -378,7 +378,7 @@ window.addEventListener('load', function() {
     // Load JSON from state.php
     // and turn into objects.
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', 'state.php');
+    xhr.open('GET', 'api/');
     xhr.onerror = function() { console.log('failed', xhr); } // to be intercepted.
     xhr.onload = function() {
         var o = JSON.parse(xhr.responseText);

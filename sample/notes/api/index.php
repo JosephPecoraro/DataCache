@@ -28,6 +28,16 @@ function create($data) {
   headercode(201);
 }
 
+function retrieve() {
+  $sql = 'select * from `drafts`';
+  $result = mysql_query($sql) or die(mysql_error());
+  $arr = array();
+  while ($record = mysql_fetch_assoc($result))
+    $arr[] = $record;
+  header('Content-type: application/json');
+  echo json_encode($arr);
+}
+
 function update($data) {
   $o = decode($data['data']);
   $sql = sprintf("update drafts set `timestamp` = '%s', `content` = '%s', `x` = %d, `y` = %d, `z` = %d where `id` = %d",
@@ -50,6 +60,7 @@ function delete($data) {
 }
 
 function error() {
+  headercode(400);
   die("error");
 }
 
@@ -62,6 +73,9 @@ $method = strtolower($_SERVER['REQUEST_METHOD']);
 switch ($method) {
   case 'post':
     create($_POST);
+    break;
+  case 'get':
+    retrieve();
     break;
   case 'put':
     parse_str(file_get_contents('php://input'), $data);

@@ -17,20 +17,20 @@ function decode($incoming) {
 
 function create($data) {
   $o = decode($data['data']);
-	$sql = sprintf("insert into `drafts` values(%d, '%s', '%s', %d, %d, %d)",
+  $sql = sprintf("insert into `drafts` values(%d, '%s', '%s', %d, %d, %d)",
     mysql_real_escape_string($o['id']),
     mysql_real_escape_string($o['timestamp']),
     mysql_real_escape_string($o['content']),
     mysql_real_escape_string($o['x']),
     mysql_real_escape_string($o['y']),
     mysql_real_escape_string($o['z']));
-	mysql_query($sql) or die(mysql_error());
-	headercode(201);
+  mysql_query($sql) or die(mysql_error());
+  headercode(201);
 }
 
 function update($data) {
   $o = decode($data['data']);
-	$sql = sprintf("update drafts set `timestamp` = '%s', `content` = '%s', `x` = %d, `y` = %d, `z` = %d where `id` = %d",
+  $sql = sprintf("update drafts set `timestamp` = '%s', `content` = '%s', `x` = %d, `y` = %d, `z` = %d where `id` = %d",
     mysql_real_escape_string($o['timestamp']),
     mysql_real_escape_string($o['content']),
     mysql_real_escape_string($o['x']),
@@ -45,8 +45,8 @@ function delete($data) {
   $o = decode($data['data']);
   $sql = sprintf("delete from `drafts` where `id` = %d limit 1",
     mysql_real_escape_string($o['id']));
-	mysql_query($sql) or die(mysql_error());
-	headercode(200);
+  mysql_query($sql) or die(mysql_error());
+  headercode(200);
 }
 
 function error() {

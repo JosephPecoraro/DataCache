@@ -71,6 +71,7 @@ body {
   background: black;
   width: 100%;
   color: white;
+  cursor: move;
   text-align: right;
 }
 
@@ -79,8 +80,10 @@ body {
 }
 
 .menubar ul li {
-  margin-right: 10px;
+  margin-right: 8px;
+  padding: 0 2px;
   display: inline;
+  cursor: pointer;
 }
 
 /* sidebar */

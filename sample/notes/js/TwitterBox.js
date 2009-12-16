@@ -109,7 +109,7 @@ function TwitterBox(id, x, y, z, timestamp, content) {
     this.boxElement.style.cssText = 'left:'+this.x+'px;top:'+this.y+'px;z-index:'+this.z;
 
     var ul = document.createElement('ul');
-    append(ul, '-', bindFunc(this.hide, this));
+    append(ul, "\u2013", bindFunc(this.hide, this));
     append(ul, 'X', bindFunc(this.dispose, this));
     function append(ul, txt, handler) {
         var li = document.createElement('li');
@@ -148,7 +148,7 @@ TwitterBox.prototype = {
         this.boxElement.style.zIndex = z;
         this._updated();
     },
-    
+
     setText: function(txt) {
         this.bodyElement.textContent = txt;
         this.updateCount();
@@ -157,12 +157,12 @@ TwitterBox.prototype = {
 
     hide: function() {
         var li = this.menubarElement.firstChild.firstChild.firstChild; // div > ul > li > span[0]
-        if (li.textContent === '-') {
+        if (li.textContent === "\u2013") {
             this.boxElement.style.opacity = '0.5';
             li.textContent = '+';
         } else {
             this.boxElement.style.opacity = '1';
-            li.textContent = '-';
+            li.textContent = "\u2013";
         }
     },
 
@@ -190,7 +190,7 @@ TwitterBox.prototype = {
     toJSONString: function() {
         return JSON.stringify(this.toJSONObject());
     },
-    
+
     _sendData: function(method, page) {
         this.timestamp = +new Date;
         var xhr = new XMLHttpRequest();
@@ -199,7 +199,7 @@ TwitterBox.prototype = {
         xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
         xhr.onload = function() { console.log('success', xhr, xhr.responseText); }
         xhr.onerror = function() { console.log('error', xhr, xhr.responseText); }
-        xhr.send(data);  
+        xhr.send(data);
     },
 
     _created: function() {
@@ -355,12 +355,17 @@ TwitterBox.createBox = function() {
 }
 
 TwitterBox.fromJSON = function(o) {
+    o.timestamp = parseInt(o.timestamp);
+    o.id = parseInt(o.id);
+    o.x = parseInt(o.x);
+    o.y = parseInt(o.y);
+    o.z = parseInt(o.z);
+
     if (o.id >= TwitterBox.nextId)
         TwitterBox.nextId = o.id+1;
     if (o.z >= TwitterBox.nextZ)
         TwitterBox.nextZ = o.z+1;
-    return new TwitterBox(parseInt(o.id), parseInt(o.x), parseInt(o.y), parseInt(o.z),
-        parseInt(o.timestamp), o.content);
+    return new TwitterBox(o.id, o.x, o.y, o.z, o.timestamp, o.content);
 }
 
 

@@ -1146,7 +1146,8 @@ InterceptableXMLHttpRequest.prototype = {
         return function handler() {
             self._applyDelegates();
             self.xhr.onreadystatechange = handler;
-            self.onreadystatechange.apply(self, arguments);
+            if (self.onreadystatechange)
+                self.onreadystatechange.apply(self, arguments);
         }
     },
 
@@ -1183,7 +1184,10 @@ InterceptableXMLHttpRequest.prototype = {
         this.statusText = sanitizedStatusText;
         this.readyState = 4; // success
         this.responseText = response.bodyText;
-        this.onreadystatechange(null);
+        if (this.onreadystatechange)
+            this.onreadystatechange(null);
+        if (this.onload)
+            this.onload(null);
     },
 
     getAllResponseHeaders: function() {

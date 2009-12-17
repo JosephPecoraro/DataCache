@@ -232,7 +232,7 @@ context('Offline Capture', function() {
             ok(tx.offline, 'transaction is offline');
             tx.capture(uri, body, 'text/plain', ['GET']);
             try { tx.getItem("DOESNOTEXIST", function() {}); }
-            catch (e) { flags.exceptionNotFound = true; }
+            catch (e) { flags.exceptionNotFound = (e.code === DOMException.NOT_FOUND_ERR); }
             tx.getItem(uri, function(item) {
                 flags.calledItemCallback = true;
                 itemCallbackData = item.body;
@@ -305,7 +305,7 @@ context('Online Transaction', function() {
             ok(!tx.offline, 'transaction is online');
             tx.capture(uri);
             try { tx.getItem("DOESNOTEXIST", function() {}); }
-            catch (e) { flags.exceptionNotFound = true; }
+            catch (e) { flags.exceptionNotFound = (e.code === DOMException.NOT_FOUND_ERR); }
             tx.getItem(uri, function(item) {
                 flags.calledItemCallback = true;
                 itemCallbackState = item.readyState;
@@ -354,7 +354,7 @@ context('Online Transaction', function() {
             ok(!!flags.firedFetchingEventEvent.cache, 'fired event had a cache');
             ok(!!flags.firedFetchingEventEvent.uri, 'fired event had a uri');
             ok(flags.calledItemCallback, 'called item callback');
-            ok(itemCallbackState === CacheItem.CACHED, 'status of the resource is catched');
+            ok(itemCallbackState === CacheItem.CACHED, 'status of the resource is cached');
             ok(itemCallbackData === body, 'proper data in the item callback');
 
             var item = tx.cache.getItem(uri);

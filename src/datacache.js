@@ -1095,7 +1095,7 @@ CacheEvent.prototype = {
                 }
             }
         }
-    };
+    }
 
     InterceptableXMLHttpRequest.prototype = {
         open: function(method, uri, async) {

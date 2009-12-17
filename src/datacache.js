@@ -1217,7 +1217,7 @@ CacheEvent.prototype = {
             this.responseText = response.bodyText;
             if (this.onreadystatechange)
                 this.onreadystatechange(null);
-            if (this.onload)
+            if (DataCache.Offline && this.onload)
                 this.onload(null);
         },
 

@@ -216,6 +216,26 @@ context('Offline Transaction', function() {
 });
 
 
+context('DataCache immediate', function() {
+    should('automatically capture and update', function() {
+        stop(); expect(3);
+
+        var uri = 'data.txt';
+        var cache = window.openDataCache();
+        cache.immediate(uri, []);
+
+        setTimeout(function() {
+            var newCache = window.openDataCache();
+            ok(cache !== newCache, 'new effective cache')
+            ok(cache.version < newCache.version, 'new effective cache');
+            try { newCache.getItem(uri); ok(true, 'captured the item'); }
+            catch (e) { ok(false, 'failed to capture the item'); }
+            start();
+        }, LATENCY);
+    });
+});
+
+
 context('Offline Capture', function() {
     var body = 'Hello, World!';
     var uri = 'blah.html';
@@ -243,8 +263,8 @@ context('Offline Capture', function() {
             cache.swapCache();
             var item = window.openDataCache().getItem(uri);
             ok(item.body === body, "proper data");
-            ok(item.readyState === CacheItem.CACHED);
-            ok(item.body === itemCallbackData);
+            ok(item.readyState === CacheItem.CACHED, 'item is cached');
+            ok(item.body === itemCallbackData, 'item has the proper data');
         }
 
         setTimeout(function() {

@@ -84,6 +84,20 @@ DataCache.prototype = {
         }
     },
 
+    immediate: function(uri, dynamicMethods) {
+        var self = this;
+        var resolvedURI = DataCache.resolveAbsoluteFromBase(window.location, uri);
+        document.addEventListener('captured', function handler(event) {
+            if (event.uri !== resolvedURI)
+                return;
+            document.removeEventListener('captured', handler, false);
+            self.swapCache();
+        }, false);
+
+        var tx = this._createCacheTransaction(this.group, false);
+        tx.capture(uri, dynamicMethods);
+    },
+
     transaction: function(callback, errorCallback) {
         var tx = this._createCacheTransaction(this.group, false);
         this._handleTransaction(tx, callback, errorCallback);
@@ -127,14 +141,8 @@ DataCache.prototype = {
 
     getItemResolved: function(resolvedURI) {
         var item = this.managed[resolvedURI];
-        if (!item) {
-            // As close as I can get to a DOMException NOT_FOUND_ERR
-            var DOMExceptionTwin = function() {};
-            DOMExceptionTwin.prototype = window.DOMException.prototype;
-            var error = new DOMExceptionTwin();
-            error.code = DOMException.NOT_FOUND_ERR;
-            throw error;
-        }
+        if (!item) // As close as I can get to a DOMException NOT_FOUND_ERR
+            throw { message: 'DataCache: no such item', code: window.DOMException.NOT_FOUND_ERR };
 
         return item;
     },
@@ -685,7 +693,7 @@ CacheEvent.prototype = {
 
             // NOTE: known to be only one group, may change in the future
             var item = null;
-            var cache = this.groups[0].effectiveCache; // I FEEL THIS IS NOT ENOUGH... Online+Offline checks?
+            var cache = this.groups[0].effectiveCache;
             try { item = cache.getItem(uri); } catch (e) {}
             if (!item)
                 return false;

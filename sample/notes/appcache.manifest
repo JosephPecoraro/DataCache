@@ -1,0 +1,16 @@
+CACHE MANIFEST
+
+# Version 1.0
+
+# Resources to Cache
+CACHE:
+index.html
+js/datacache.js
+js/offlineHandlers.js
+js/TwitterBox.js
+css/styles.css
+images/bg_button_a.gif
+images/bg_button_span.gif
+
+NETWORK:
+*

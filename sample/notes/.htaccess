@@ -1,0 +1,2 @@
+# Cache Manifest mime/type
+AddType text/cache-manifest manifest

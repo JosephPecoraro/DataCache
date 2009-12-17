@@ -1,8 +1,63 @@
 <!DOCTYPE html>
-<html>
+<html manifest="appcache.manifest">
 <head>
   <title>Twitter Notes</title>
   <link rel="stylesheet" href="css/styles.css" type="text/css" />
+  <script type="text/javascript">
+
+    // ------------------------------------
+    //   ApplicationCache Monitoring Code
+    // ------------------------------------
+
+    (function() {
+
+        var statuses = [];
+        statuses[applicationCache.UNCACHED]    = 'UNCACHED';
+        statuses[applicationCache.IDLE]        = 'IDLE';
+        statuses[applicationCache.CHECKING]    = 'CHECKING';
+        statuses[applicationCache.DOWNLOADING] = 'DOWNLOADING';
+        statuses[applicationCache.UPDATEREADY] = 'UPDATEREADY';
+        statuses[applicationCache.OBSOLETE]    = 'OBSOLETE';
+
+        function getStatus() {
+            return [navigator.onLine, statuses[applicationCache.status]];
+        }
+
+        applicationCache.addEventListener('checking', function(event) {
+            console.log('checking', getStatus(), event);
+        }, false);
+
+        applicationCache.addEventListener('error', function(event) {
+            console.log('error', getStatus(), event);
+        }, false);
+
+        applicationCache.addEventListener('noupdate', function(event) {
+            console.log('noupdate', getStatus(), event);
+        }, false);
+
+        applicationCache.addEventListener('downloading', function(event) {
+            console.log('downloading', getStatus(), event);
+        }, false);
+
+        applicationCache.addEventListener('progress', function(event) {
+            console.log('progress', getStatus(), event);
+        }, false);
+
+        applicationCache.addEventListener('updateready', function(event) {
+            console.log('updateready', getStatus(), event);
+            applicationCache.swapCache();
+        }, false);
+
+        applicationCache.addEventListener('cached', function(event) {
+            console.log('cached', getStatus(), event);
+        }, false);
+
+        applicationCache.addEventListener('obsolete', function(event) {
+            console.log('obsolete', getStatus(), event);
+        }, false);
+
+  })();
+  </script>
 </head>
 <body>
   <div id="title">
@@ -30,6 +85,12 @@
     -->
 
   </div>
+
+  <!-- Data Cache Library -->
+  <script src="js/datacache.js" type="text/javascript"></script>
+
+  <!-- Offline Handlers -->
+  <script src="js/offlineHandlers.js" type="text/javascript"></script>
 
   <!-- Object Library -->
   <script src="js/TwitterBox.js" type="text/javascript"></script>

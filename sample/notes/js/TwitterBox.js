@@ -382,6 +382,9 @@ window.addEventListener('load', function() {
     xhr.onerror = function() { console.log('failed', xhr); } // to be intercepted.
     xhr.onload = function() {
         var o = JSON.parse(xhr.responseText);
+        if (!o)
+            return;
+
         for (var i=0, len=o.length; i<len; ++i)
             TwitterBox.fromJSON(o[i]);
     }

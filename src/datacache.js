@@ -29,6 +29,14 @@ function DataCache(group, origin, version) {
     this.completeness = 'incomplete';
     this.version = version || 0;
 
+    this.onupdating  = null;
+    this.onfetching  = null;
+    this.oncaptured  = null;
+    this.onreleased  = null;
+    this.onready     = null;
+    this.onobsolete  = null;
+    this.onerror     = null;
+
     this.managed = {};
 }
 
@@ -268,7 +276,7 @@ DataCache.parseHeaders = function(headersText) {
 function CacheTransaction(cache) {
     this.cache = cache;
     this.status = CacheTransaction.PENDING;
-    this.oncommitted = function() {};
+    this.oncommitted = null;
 }
 
 CacheTransaction.prototype = {
@@ -675,6 +683,21 @@ CacheEvent.prototype = {
             event.initEvent(type, false, false);
             event.initCacheEvent(cache, uri);
             document.dispatchEvent(event);
+
+            var convertTable = {
+                'captured': 'oncaptured',
+                'error': 'onerror',
+                'fetching': 'onfetching',
+                'obsolete': 'onobsolete',
+                'off-line-updating': 'onofflineupdating',
+                'ready': 'onready',
+                'released': 'onreleased',
+                'updating': 'onupdating'
+            };
+
+            var attributeListener = cache[convertTable[type]];
+            if (attributeListener)
+                setTimeout(attributeListener, 0, event);
         },
 
         addGroup: function(group) {

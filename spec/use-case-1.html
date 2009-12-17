@@ -32,12 +32,12 @@ context('Offline Capture a Resource', function() {
         var body = '[0,1,2]';
 
         // Event to fire before transaction begins
-        window.addEventListener('off-line-updating', function(event) {
+        document.addEventListener('off-line-updating', function(event) {
             addToOrder(0, 'off-line-updating listener');
         }, false);
 
         // Event to fire on capture
-        window.addEventListener('captured', function(event) {
+        document.addEventListener('captured', function(event) {
             addToOrder(2, 'captured listener');
         }, false);
 

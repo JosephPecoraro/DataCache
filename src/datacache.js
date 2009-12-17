@@ -8,7 +8,7 @@
 //   Object Oriented Helpers
 // ---------------------------
 
-// Valid for WebKit and Firefox, the supported browsers
+// Valid for Safari (WebKit), Chrome, and Firefox, the supported browsers
 function subclass(child, parent) {
     child.prototype.__proto__ = parent.prototype;
 }
@@ -127,8 +127,14 @@ DataCache.prototype = {
 
     getItemResolved: function(resolvedURI) {
         var item = this.managed[resolvedURI];
-        if (!item)
-            throw 'DataCache: no such item'; // FIXME: raise NOT_FOUND_ERR
+        if (!item) {
+            // As close as I can get to a DOMException NOT_FOUND_ERR
+            var DOMExceptionTwin = function() {};
+            DOMExceptionTwin.prototype = window.DOMException.prototype;
+            var error = new DOMExceptionTwin();
+            error.code = DOMException.NOT_FOUND_ERR;
+            throw error;
+        }
 
         return item;
     },
@@ -289,14 +295,13 @@ CacheTransaction.prototype = {
         var group = cache.group;
 
         group.update(cache);
-        this.status = CacheTransaction.COMMITTED; // FIXME: Missing from the Spec?!?!
+        this.status = CacheTransaction.COMMITTED;
 
         if (this.offline)
             group.effectiveCache = cache;
         else
             group.status = DataCache.IDLE;
 
-        // FIXME: Spec says this is special?!?!
         cache.group.host.queueTask('ready', cache);
 
         if (this.oncommitted) {
@@ -311,7 +316,7 @@ CacheTransaction.prototype = {
         if (tx.status !== CacheTransaction.PENDING)
             throw "CacheTransaction: can only capture a PENDING transaction";
 
-        var location = host.realHost.location; // NOTE: realHost is always window
+        var location = window.location;
         this._checkURI(location, uri);
         var absoluteURI = DataCache.resolveAbsoluteFromBase(location, uri);
 
@@ -661,7 +666,7 @@ CacheEvent.prototype = {
             var event = document.createEvent('CacheEvent');
             event.initEvent(type, false, false);
             event.initCacheEvent(cache, uri);
-            this.realHost.dispatchEvent(event);
+            document.dispatchEvent(event);
         },
 
         addGroup: function(group) {
@@ -1065,6 +1070,7 @@ CacheEvent.prototype = {
         // So we may have to apply them directly to the xhr.
         // Unfortunately this is a very dirty hack.
         this._events = ['onload', 'onerror', 'onloadstart', 'onabort', 'onprogress'];
+        this._getters = ['status', 'readyState', 'responseXML', 'responseText', 'statusText'];
 
         // Generate functions with non-closured values
         function genericApply(func) { return function() { return xhr[func].apply(xhr, arguments); } };
@@ -1074,8 +1080,6 @@ CacheEvent.prototype = {
         // Pass through Interface, with the exception of some
         // NOTE: Getters / Setters need special handling
         var exceptions = ['open', 'send', 'setRequestHeader', 'getAllResponseHeaders', 'getResponseHeader'];
-        var getters = ['status', 'readyState', 'responseXML', 'responseText', 'statusText'];
-
         for (var func in this.xhr) {
             if (!this.xhr.hasOwnProperty(func))
                 continue;

@@ -7,7 +7,7 @@ var LATENCY = 500;
 function basicEventChecker(type, object, flag, extra) {
     object[flag] = false;
     object[flag+'Event'] = false;
-    window.addEventListener(type, function handler(event) {
+    document.addEventListener(type, function handler(event) {
         window.removeEventListener(type, handler, false);
         object[flag] = true;
         object[flag+'Event'] = event;

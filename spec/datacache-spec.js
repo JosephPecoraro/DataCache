@@ -31,6 +31,11 @@ function attributeEventChecker(cache, type, object, flag) {
 //   Test Suite
 // --------------
 
+DataCache.Storage.remove(DataCache.resolveAbsoluteFromBase(window.location, 'files/a.txt'));
+DataCache.Storage.remove(DataCache.resolveAbsoluteFromBase(window.location, 'files/b.txt'));
+DataCache.Storage.remove(DataCache.resolveAbsoluteFromBase(window.location, 'files/c.txt'));
+
+
 context('Basics', function() {
     should('have public methods', function() {
         ok(window.openDataCache !== undefined, 'window.openDataCache exists');
@@ -497,7 +502,7 @@ context('Online Transaction', function() {
 
 context('DataCache eachModificationSince', function() {
     should('return all cached files', function() {
-        stop(); expect(5);
+        stop(); expect(6);
 
         // Counters / Test States
         var itemCb1 = 0;
@@ -541,22 +546,23 @@ context('DataCache eachModificationSince', function() {
             // end version
             cache.swapCache();
             highVersion = window.openDataCache().version;
-        });
+        }, LATENCY);
 
         setTimeout(function() {
             var cache = window.openDataCache();
             cache.eachModificationSince(lowVersion, itemCallback1, successCallback1); // a, b, and c
             cache.eachModificationSince(null, itemCallback2, successCallback2);       // everything so far
-        }, LATENCY);
+        }, LATENCY+100);
 
         setTimeout(function() {
+            ok(highVersion >= lowVersion, 'different caches');
             ok(itemCb1 === 3, 'item callback 1 called ' + itemCb1 + ' times');
             ok(itemCb2 > 3, 'item callback 2 called ' + itemCb2 + ' times');
-            ok(deletedCount === 1, 'delete count was 1');
+            ok(deletedCount === 1, 'delete count was supposed to be 1, but was ' + deletedCount);
             ok(calledSuccessCallback1, 'called the success callback');
             ok(calledSuccessCallback2, 'called the success callback');
             start();
-        }, LATENCY*2);
+        }, LATENCY+100+100);
     });
 });
 

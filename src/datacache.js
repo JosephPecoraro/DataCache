@@ -37,7 +37,7 @@ function DataCache(group, origin, version) {
     this.onobsolete  = null;
     this.onerror     = null;
 
-    this.managed = {};
+    this._managed = {};
 }
 
 DataCache.IDLE = 0;
@@ -130,7 +130,8 @@ DataCache.prototype = {
     },
 
     manage: function(uri, resource) {
-        this.managed[uri] = resource;
+        DataCache.Storage.save({ key: uri, data: resource });
+        this._managed[uri] = true;
     },
 
     removeItem: function(uri) {
@@ -139,7 +140,8 @@ DataCache.prototype = {
     },
 
     removeItemResolved: function(resolvedURI) {
-        delete this.managed[resolvedURI];
+        DataCache.Storage.remove(resolvedURI);
+        delete this._managed[resolvedURI];
     },
 
     getItem: function(uri) {
@@ -148,17 +150,19 @@ DataCache.prototype = {
     },
 
     getItemResolved: function(resolvedURI) {
-        var item = this.managed[resolvedURI];
-        if (!item) // As close as I can get to a DOMException NOT_FOUND_ERR
+        if (!(resolvedURI in this._managed))
             throw { message: 'DataCache: no such item', code: window.DOMException.NOT_FOUND_ERR };
 
-        return item;
+        return DataCache.Storage.getSync(resolvedURI).data;
     },
 
     getManagedItems: function() {
         var items = [];
-        for (var uri in this.managed)
-            items.push({ uri: uri, item: this.managed[uri] });
+        for (var uri in this._managed) {
+            var item = DataCache.Storage.getSync(uri).data;
+            items.push({ uri: uri, item: item });
+        }
+
         return items;
     }
 }
@@ -172,6 +176,7 @@ DataCache.GlobalHost = null;      // set later
 DataCache.Offline = false;        // set as determined
 DataCache.TimeoutDuration = 3000; // three seconds
 DataCache.StatusCanBeZero = /^file/.test(window.location.protocol);
+DataCache.Storage = new Lawnchair({adaptor:'dom'});
 
 // TODO: make an XHR request for the current page to determine offline status
 // also, store data in sessionStorage (and timestamp) to carry such data along.
@@ -885,7 +890,7 @@ CacheEvent.prototype = {
         createLikeRelevant: function() {
             var relevant = this.relevantCache;
             var cache = this.create();
-            cache.managed = deepCopy(relevant.managed);
+            cache._managed = deepCopy(relevant._managed);
             return cache;
         },
 

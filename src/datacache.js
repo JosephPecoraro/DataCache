@@ -218,7 +218,7 @@ DataCache.resolveAbsoluteFromBase = function(location, uri) {
     if (uri.charAt(0) === '/')
         uri = uri.substring(1);
     else {
-        if (currentDir.charAt(currentDir.length-1) == '/')
+        if (currentDir.charAt(currentDir.length-1) === '/')
             str = currentDir.substring(0, currentDir.length-1);
         else
             str = currentDir; // This case is not tested... location.href doesn't end in a slash? can browsers do this?

@@ -44,8 +44,12 @@ context('Non Captured Resource', function() {
             addToOrder(2, 'captured listener');
         }, false);
 
-        // Offline Capture a Resource
+        // File is expected to be deleted
         var cache = window.openDataCache();
+        delete cache._managed[DataCache.resolveAbsoluteFromBase(window.location, dataFileURI)];
+        DataCache.Storage.remove(DataCache.resolveAbsoluteFromBase(window.location, dataFileURI));
+
+        // Offline Capture a Resource (unrelated to what we are getting)
         cache.offlineTransaction(function(tx) {
             addToOrder(1, 'transaction');
             tx.capture(uriToCapture, body, 'text/plain', []);

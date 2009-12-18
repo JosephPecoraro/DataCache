@@ -10,3 +10,4 @@
     Changes:
       - added getSync method to DOMStorageAdaptor.js
       - added access to getSync in lawnchair.js
+      - try/catch when checking all records in case others use in localStorage

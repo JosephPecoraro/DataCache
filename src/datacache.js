@@ -421,7 +421,6 @@ OnlineTransaction.prototype = {
     },
 
     _captureSuccess: function(xhr, uri, methods) {
-        // console.log('success', xhr);
         var body = xhr.responseText; // FIXME: binary?
         var type = xhr.getResponseHeader('Content-Type'); // FIXME: determine from filetype as well?
         var headers = DataCache.parseHeaders(xhr.getAllResponseHeaders());
@@ -431,7 +430,6 @@ OnlineTransaction.prototype = {
     },
 
     _captureFailure: function(xhr) {
-        // console.log('failure', xhr);
         this.cache.group.remove(this.cache);
         this.status = CacheTransaction.ABORT;
         if (xhr.status !== 401) {
@@ -883,7 +881,7 @@ CacheEvent.prototype = {
             this._nextVersion++;
             this.add(cache);
             this.status = DataCache.IDLE;
-            DataCacheGroupController.save(this);
+            DataCacheController.save(this);
             return cache;
         },
 
@@ -983,52 +981,29 @@ CacheEvent.prototype = {
     }
 
 
-    // --------------------------------------------
-    //   DataCacheGroupController (save-and-load)
-    // --------------------------------------------
+    // ---------------------------------------
+    //   DataCacheController (save-and-load)
+    // ---------------------------------------
 
-    DataCacheGroupController = {
-        key: 'datacachegroup',
+    DataCacheController = {
+        key: 'DataCacheController',
 
         load: function() {
-            var jsonString = window.localStorage[DataCacheGroupController.key];
+            var jsonString = window.localStorage.getItem(DataCacheController.key);
             if (!jsonString)
                 return;
 
-            // TODO: Handle managed resources
-            var savedObj = JSON.parse(jsonString);
+            DataCache.Offline = JSON.parse(jsonString);
+
+            // NOTE: This messes with private values (unsafe)
             var host = this._createDataCacheHost();
             var group = this._createDataCacheGroup(host, window.location.host);
-            for (var i in savedObj.v) {
-                var v = savedObj.v[i];
-                group.versions[i] = this._createDataCache(group, v.origin, v.version, v.completeness);
-            }
-
+            var cache = this._createDataCache(group, window.location.host, group._nextVersion++, 'complete');
             return group;
         },
 
         save: function(group) {
-            // TODO: Handle local servers in CacheHost (they are functions...)
-            // TODO: Handle managed resources in DataCache
-            var savedObj = { _nextVersion: group._nextVersion, v: {} };
-            for (var i in group.versions) {
-                var version = group.versions[i];
-                savedObj.v[i] = {
-                    origin: version.origin,
-                    completeness: version.completeness,
-                    version: version.version
-                };
-            }
-
-            var jsonString = JSON.stringify(savedObj);
-            // FIXME: reenable later one
-            // window.localStorage[DataCacheGroupController.key] = jsonString;
-        },
-
-        _createDataCache: function(group, origin, version, completeness) {
-            var cache = new DataCache(group, origin, version);
-            cache.completeness = completeness;
-            return cache;
+            window.localStorage.setItem(DataCacheController.key, JSON.stringify(DataCache.Offline));
         },
 
         _createDataCacheHost: function() {
@@ -1037,6 +1012,22 @@ CacheEvent.prototype = {
 
         _createDataCacheGroup: function(host, origin) {
             return new DataCacheGroup(host, origin);
+        },
+
+        _createDataCache: function(group, origin, version, completeness) {
+            var cache = new DataCache(group, origin, version);
+            cache.completeness = completeness;
+            group.add(cache);
+
+            DataCache.Storage.all(function(all) {
+                for (var i=0, len=all.length; i<len; ++i) {
+                    var r = all[i];
+                    if (typeof r === 'object' && 'key' in r && 'data' in r)
+                        cache._managed[r.key] = true;
+                }
+            });
+
+            return cache;
         }
     }
 
@@ -1052,7 +1043,7 @@ CacheEvent.prototype = {
     // -----------------------
     //   Load DataCacheGroup
     // -----------------------
-    var group = DataCacheGroupController.load();
+    var group = DataCacheController.load();
     if (!group)
         group = new DataCacheGroup(host, origin);
 

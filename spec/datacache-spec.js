@@ -31,10 +31,6 @@ function attributeEventChecker(cache, type, object, flag) {
 //   Test Suite
 // --------------
 
-DataCache.Storage.remove(DataCache.resolveAbsoluteFromBase(window.location, 'files/a.txt'));
-DataCache.Storage.remove(DataCache.resolveAbsoluteFromBase(window.location, 'files/b.txt'));
-DataCache.Storage.remove(DataCache.resolveAbsoluteFromBase(window.location, 'files/c.txt'));
-
 
 context('Basics', function() {
     should('have public methods', function() {
@@ -523,9 +519,17 @@ context('DataCache eachModificationSince', function() {
         window.openDataCache().swapCache();
         var cache = window.openDataCache();
 
+        // Delete these values across page loads, to ensure test looks like we are starting from scratch.
+        delete cache._managed[DataCache.resolveAbsoluteFromBase(window.location, 'files/a.txt')];
+        delete cache._managed[DataCache.resolveAbsoluteFromBase(window.location, 'files/b.txt')];
+        delete cache._managed[DataCache.resolveAbsoluteFromBase(window.location, 'files/c.txt')];
+        DataCache.Storage.remove(DataCache.resolveAbsoluteFromBase(window.location, 'files/a.txt'));
+        DataCache.Storage.remove(DataCache.resolveAbsoluteFromBase(window.location, 'files/b.txt'));
+        DataCache.Storage.remove(DataCache.resolveAbsoluteFromBase(window.location, 'files/c.txt'));
+
         // start version
         var highVersion = 0;
-        var lowVersion = window.openDataCache().version;
+        var lowVersion = cache.version;
 
         // -- LOW: add a.txt, b.txt, c.txt
         cache.transaction(function(tx) {
@@ -537,7 +541,7 @@ context('DataCache eachModificationSince', function() {
 
         // -- HIGH: remove b.txt
         setTimeout(function() {
-            cache = window.openDataCache();
+            var cache = window.openDataCache();
             cache.transaction(function(tx) {
                 tx.release('files/b.txt');
                 tx.commit();

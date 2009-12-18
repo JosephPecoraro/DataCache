@@ -74,9 +74,11 @@ DOMStorageAdaptor.prototype = {
         var results = [];
         for (var i = 0, len = this.storage.length; i < len; ++i) {
             var key = this.storage.key(i);
-            var obj = this.deserialize(this.storage.getItem(key));
-            obj.key = key;
-            results.push(obj);
+            try {
+                var obj = this.deserialize(this.storage.getItem(key));
+                obj.key = key;
+                results.push(obj);
+            } catch (e) {} // ignore
         }
 
         if (cb)

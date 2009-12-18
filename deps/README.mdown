@@ -1,0 +1,12 @@
+3rd Party Dependencies:
+-----------------------
+
+  - Lawnchair
+    License: MIT
+    Description: A client side JSON document store
+    Homepage: http://brianleroux.github.com/lawnchair/
+    Repository: http://github.com/brianleroux/lawnchair
+
+    Changes:
+      - added getSync method to DOMStorageAdaptor.js
+      - added access to getSync in lawnchair.js

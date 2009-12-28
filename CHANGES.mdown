@@ -1,0 +1,24 @@
+Improvements / Changes over the Specification:
+
+  - `now-online` and `now-offline` transition events fired at the cache host
+    level (so `document` for my library) when a connectivity transition has
+    been detected.
+
+  - `DataCache.getManagedItems` returns an Array of all the items stored in
+    the particular cache, with the form:
+
+        { uri: <string>, item: <CacheItem> }
+
+  - `eachModificationSince` will go back through everything if the
+    `lowVersion` is null.
+
+  - when the item callback for `eachModificationSince` is triggered the library
+    provides a second parameter with the resolved URI of the item. This is
+    because `uri` is missing from the `CacheItem` IDL.
+
+  - `navigator.removeRegisteredOfflineHandlers` removes all registered
+    local server handlers.
+
+  - A standard set of Http Status values in `Http.Status`. For example:
+  
+        response.setStatus(200, Http.Status[200]); // "OK"

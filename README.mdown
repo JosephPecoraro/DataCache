@@ -3,7 +3,7 @@
 This is a JavaScript library implementing a subset of the [DataCache API][DataCache]
 Working Draft in a cross browser compatible JavaScript layer.
 
-Planned Supported Browsers:
+Supported Browsers:
 
   - Safari (4.0.3+)
   - Firefox (3.5+)
@@ -13,6 +13,10 @@ This project is Free and Open Source. Please expand, fork, suggest merges,
 and provide feedback or advice.
 
 Copyright (c) 2009 Joseph Pecoraro, released under the MIT license
+
+### Improvements / Modifications made by the Library
+
+See [CHANGES.mdown](http://github.com/JosephPecoraro/DataCache/blob/master/CHANGES.mdown).
 
 ### Tests are Online
 

@@ -1,13 +1,13 @@
 3rd Party Dependencies:
 -----------------------
 
-  - Lawnchair
-    License: MIT
-    Description: A client side JSON document store
-    Homepage: http://brianleroux.github.com/lawnchair/
-    Repository: http://github.com/brianleroux/lawnchair
+  - Lawnchair  
+    License: MIT  
+    Description: A client side JSON document store  
+    Homepage: http://brianleroux.github.com/lawnchair/  
+    Repository: http://github.com/brianleroux/lawnchair 
 
-    Changes:
+    Changes I made:
       - added getSync method to DOMStorageAdaptor.js
       - added access to getSync in lawnchair.js
-      - try/catch when checking all records in case others use in localStorage
+      - try/catch when checking all records in case others use localStorage

@@ -556,7 +556,7 @@ context('DataCache eachModificationSince', function() {
             var cache = window.openDataCache();
             cache.eachModificationSince(lowVersion, itemCallback1, successCallback1); // a, b, and c
             cache.eachModificationSince(null, itemCallback2, successCallback2);       // everything so far
-        }, LATENCY+100);
+        }, LATENCY*2);
 
         setTimeout(function() {
             ok(highVersion >= lowVersion, 'different caches');
@@ -566,7 +566,7 @@ context('DataCache eachModificationSince', function() {
             ok(calledSuccessCallback1, 'called the success callback');
             ok(calledSuccessCallback2, 'called the success callback');
             start();
-        }, LATENCY+100+100);
+        }, LATENCY*3);
     });
 });
 

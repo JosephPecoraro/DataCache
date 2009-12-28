@@ -729,8 +729,9 @@ CacheEvent.prototype = {
                 return false;
 
             // Non Dynamic Request, pull from cache, represent as a response
+            // NOTE: a HEAD request should have a null body
             if (item.dynamicMethods.indexOf(method) === -1)
-                return new HttpResponse(200, Http.Status[200], item.body, item.headers);
+                return new HttpResponse(200, Http.Status[200], (method === 'HEAD' ? null : item.body), item.headers);
 
             // Find Specific Candidate Server
             var resolvedURI = DataCache.resolveAbsoluteFromBase(window.location, uri);

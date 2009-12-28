@@ -178,8 +178,18 @@ DataCache.TimeoutDuration = 3000; // three seconds
 DataCache.StatusCanBeZero = /^file/.test(window.location.protocol);
 DataCache.Storage = new Lawnchair({adaptor:'dom'});
 
-// TODO: make an XHR request for the current page to determine offline status
-// also, store data in sessionStorage (and timestamp) to carry such data along.
+DataCache.setAsOnline  = function() { DataCache.setOnlineOfflineStatus(false); }
+DataCache.setAsOffline = function() { DataCache.setOnlineOfflineStatus(true);  }
+DataCache.setOnlineOfflineStatus = function(isOffline) {
+    localStorage.setItem('DataCacheAutoDetect', Date.now());
+    if (isOffline != DataCache.Offline) {
+        DataCache.Offline = isOffline;
+        var type = (isOffline ? 'now-offline' : 'now-online');
+        var event = document.createEvent('Event');
+        event.initEvent(type, false, false);
+        document.dispatchEvent(event);
+    }
+}
 
 DataCache.resolveAbsoluteFromBase = function(location, uri) {
 
@@ -271,7 +281,6 @@ DataCache.parseHeaders = function(headersText) {
 
     return headers;
 }
-
 
 
 // --------------------------------
@@ -479,7 +488,7 @@ function CacheItem(readyState, body, type, dynamicMethods, headers) {
     this.readyState = readyState;
     this.body = body;
     this.type = (type || 'text/plain');
-    this.dynamicMethods = dynamicMethods || [];
+    this.dynamicMethods = (dynamicMethods || []);
     this.headers = (headers || {});
 }
 
@@ -638,9 +647,9 @@ CacheEvent.prototype = {
 }; // semicolon is required
 
 
-// -------------------------------------
-//   Override Default Browser Behavior
-// -------------------------------------
+// ------------------------------------
+//   Embellish Browser Event Behavior
+// ------------------------------------
 
 (function() {
 
@@ -764,7 +773,7 @@ CacheEvent.prototype = {
             var connectivityDetectionTimer = setTimeout(function() {
                 ABORTED = true;
                 xhr.abort();
-                DataCache.Offline = true;
+                DataCache.setAsOffline(); // potential transition to offline
                 var mutableResponse = handleWhenOffline();
                 ixhr.onreadystatechange = oldReadyStateHandler;
                 ixhr.handleHttpResponse(mutableResponse);
@@ -785,7 +794,7 @@ CacheEvent.prototype = {
                         return;
 
                     clearTimeout(connectivityDetectionTimer);
-                    DataCache.Offline = false;
+                    DataCache.setAsOnline(); // potential transition to online
                     var response = self.httpResponseFromXhr(xhr);
                     server.reviewer(request, response);
                     ixhr.onreadystatechange = oldReadyStateHandler;
@@ -1247,5 +1256,80 @@ CacheEvent.prototype = {
     window.InterceptableXMLHttpRequest = InterceptableXMLHttpRequest;
     window.XMLHttpRequest = InterceptableXMLHttpRequest;
     window._XMLHttpRequest = _XMLHttpRequest;
+
+
+    // -----------------------------------------
+    //   Online / Offline Transition Detection
+    // -----------------------------------------
+    //
+    //   - localStorage key determines saves time of last check,
+    //     prevents too many useless requests.
+    //
+    //   - make an AJAX request for the current page, avoiding the
+    //     interception handling above, we set the status accordingly.
+    //     NOTE: we need to bust through the cache for Firefox,
+    //     so we add a timestamp to the request.
+    //
+    //       Firefox and WebKit differ:
+    //         - FF rarely calls onerror, so the timeout happens
+    //         - WebKit fires onerror, timeout rarely happens
+    //
+    //   - check every now and again, to trigger an Online/Offline
+    //     transition event in case of a connectivity change.
+    //
+
+    window.addEventListener('load', function() {
+
+        // Constants
+        // NOTE: Idea: make this an exponential back off?
+        var cutoffDuration = 30000;
+        var repeatDuration = 60000;
+
+        function autoDetect() {
+
+            // If this type of check was already made within the last 30 seconds
+            // then don't bother checking. (Reduce the number of requests).
+            var now = Date.now();
+            var key = 'DataCacheAutoDetect';
+            var loc = window.location;
+            var uri = loc.href + (loc.search.length > 0 ? '&' : '?') + 'cachebuster=' + now;
+            var cutoff = now - cutoffDuration;
+            var lastAttempt = localStorage.getItem(key);
+            if (lastAttempt && parseInt(lastAttempt) > cutoff)
+                return;
+
+            // Make the dummy request, which will automatically flip if connectivity
+            // has changed. NOTE: this is a raw XMLHttpRequest
+            var xhr = new _XMLHttpRequest();
+            xhr.open("HEAD", uri, true);
+
+            // Duplicated Abort Algorithm to avoid DataCache and LocalServer issues.
+            // Contains simplified monitoring (timeout / error / load)
+            var ABORTED = false;
+            var connectivityDetectionTimer = setTimeout(function() {
+                ABORTED = true; xhr.abort();
+                DataCache.setAsOffline();
+            }, DataCache.TimeoutDuration);
+
+            xhr.onerror = function() {
+                clearTimeout(connectivityDetectionTimer);
+                DataCache.setAsOffline();
+            }
+
+            xhr.onload = function() {
+                if (ABORTED) return;
+                clearTimeout(connectivityDetectionTimer);
+                DataCache.setAsOnline();
+                localStorage.setItem(key, Date.now());
+            }
+
+            xhr.send();
+        }
+
+        // Check repeatedly
+        setInterval(autoDetect, repeatDuration);
+        autoDetect();
+
+    }, false);
 
 })();

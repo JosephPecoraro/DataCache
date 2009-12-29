@@ -3,71 +3,51 @@
  * Joseph Pecoraro
  */
 
-
 /*
- * NOTE: My REST API's interface is rather ugly right now.
- * (it all uses one uri, for updates, etc.) This makes some
- * of this code needlessly complex. I plan to fix that.
+ * TODO: Synchronization
  *
- * It currently is:
- *
- *   UDPATE api/     => Peeks into the {data} to find what to update.
- *
- * It should be:
- *
- *   UPDATE api/1    => Updates TwitterBox with id 1.
- *
- *
- * NOTE: The DataCache Library currently does not store its
- * contents persistently. This means cached information is
- * lost on reload. I have a simple localStorage trick here
- * to enable this application to work. Most of the FIXME's
- * explain what will be removed.
- *
- *
- * NOTE: Synchronization and automatic Online Detection are
- * note yet implemented.
+ * TODO: Review (link offline + online)
  */
 
-// Fake Offline for Testing Purposes
+// ------------------------
+//   Fake Offline Testing
+// ------------------------
+
 // DataCache.Offline = true;
+// document.addEventListener('now-online', function() {
+//     DataCache.Offline = true;
+// }, false);
 
 // Prevent Namespace Collisions
 (function() {
 
-    // ----------------------------------
-    //   Temporary Table of Saved Items
-    // ----------------------------------
-    // NOTE: This just stores in localStorage all the
+    // ------------------------
+    //   Table of Saved Items
+    // ------------------------
+    // NOTE: This just stores in localStorage the names of
     // items that we have captured, since there is no way
     // to just "pull" them individually.
-    //
-    // FIXME: This currently stores the request in localStorage
-    // that is a task that DataCache should do. This is to handle
-    // that persitently across page loads.
 
     function SavedItems() {
-        var savedValue = window.localStorage[SavedItems.STORAGEKEY];
+        var savedValue = window.localStorage.getItem(SavedItems.STORAGEKEY);
         this.items = (savedValue ? JSON.parse(savedValue) : {});
     }
 
     SavedItems.STORAGEKEY = 'saveditems';
 
     SavedItems.prototype = {
-        add: function(id, body) {
+        add: function(id) {
             this.items[id] = true;
-            window.localStorage.setItem(id, JSON.stringify(body)); // FIXME: to remove
             this._store();
         },
 
         remove: function(id) {
             delete this.items[id];
-            window.localStorage.removeItem(id) // FIXME: to remove
             this._store();
         },
 
         _store: function() {
-            window.localStorage[SavedItems.STORAGEKEY] = JSON.stringify(this.items);
+            window.localStorage.setItem(SavedItems.STORAGEKEY, JSON.stringify(this.items));
         }
     }
 
@@ -78,6 +58,18 @@
 
     var apiURI = 'api/';
     var dynamicMethods = ['GET', 'POST', 'PUT', 'DELETE'];
+    var handlingLevel = null; // set later
+
+
+    // ----------------------------------
+    //   Switch Between Handling Levels
+    // ----------------------------------
+
+    var select = document.getElementById('offline-handling');
+    handlingLevel = select.options[select.selectedIndex].value;
+    select.addEventListener('change', function() {
+        handlingLevel = select.options[select.selectedIndex].value;
+    }, false);
 
 
     // ----------------------------------------------------
@@ -103,12 +95,26 @@
     }
 
     function interceptor(request, response) {
-        var handler = interceptor[request.method.toUpperCase()];
-        if (handler)
-            handler(request, response);
 
+        // Basic Handling
+        if (handlingLevel === 'basic' && request.method.toUpperCase() !== 'GET') {
+            alert('You are offline with basic handling. Readonly');
+            response.setStatus(400, Http.Status[400]);
+            response.send();
+            return;
+        }
+
+        // Advnaced Handling
+        var handler = interceptor[request.method.toUpperCase()];
+        if (handler) {
+            handler(request, response);
+            return;
+        }
+
+        // Error
         response.setStatus(400, Http.Status[400]);
         response.send();
+
     }
 
 
@@ -120,7 +126,7 @@
         var obj = parseBoxObjectFromRequest(request.bodyText);
         cache.offlineTransaction(function(tx) {
             var key = apiURI+obj.id;
-            savedItems.add(key, request.bodyText); // FIXME: this should not pass the bodyText
+            savedItems.add(key);
             tx.capture(key, request.bodyText, request.headers['Content-Type'], dynamicMethods);
             tx.commit();
         });
@@ -133,17 +139,12 @@
         var tx = cache.transactionSync();
         var arr = [];
         for (var key in savedItems.items) {
-            var body = JSON.parse(window.localStorage[key]);
-            var obj = parseBoxObjectFromRequest(body);
-            arr.push(obj)
+            try {
+                var body = tx.cache.getItem(key).body; // FIXME: Private API, synchronous...
+                var obj = parseBoxObjectFromRequest(body);
+                arr.push(obj)
+            } catch (e) {} // ignored 
         }
-
-        // FIXME: This should become:
-        // for (var key in savedItems.items) {
-        //     var body = tx.getItem(key);
-        //     var obj = parseBoxObjectFromRequest(body);
-        //     arr.push(obj)
-        // }
 
         response.setStatus(200, Http.Status[200]);
         response.setResponseText(JSON.stringify(arr));
@@ -154,7 +155,6 @@
         var obj = parseBoxObjectFromRequest(request.bodyText);
         cache.offlineTransaction(function(tx) {
             var key = apiURI+obj.id;
-            savedItems.add(key, request.bodyText); // FIXME: this should be removed
             tx.capture(key, request.bodyText, request.headers['Content-Type'], dynamicMethods);
             tx.commit();
         });

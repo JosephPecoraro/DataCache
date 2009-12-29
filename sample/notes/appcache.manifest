@@ -1,10 +1,13 @@
 CACHE MANIFEST
 
-# Version 1.0
+# Version 2.0
 
 # Resources to Cache
 CACHE:
 index.html
+js/adaptors/Helpers.js
+js/adaptors/DOMStorageAdaptor.js
+js/lawnchair.js
 js/datacache.js
 js/offlineHandlers.js
 js/TwitterBox.js

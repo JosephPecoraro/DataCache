@@ -70,6 +70,12 @@
         <li><a class="button" href="#" onclick="TwitterBox.createBox();"><span>Create</span></a></li>
         <li><a class="button" href="#" onclick="alert('Does nothing');"><span>Logout</span></a></li>
       </ul>
+      <br />
+      <label for="offline-handling">Handling</label>
+      <select id="offline-handling">
+        <option value="advanced" selected>advanced</option>
+        <option value="basic">basic</option>
+      </select>
     </div>
 
     <!-- This is what a box looks like...
@@ -86,7 +92,10 @@
 
   </div>
 
-  <!-- Data Cache Library -->
+  <!-- Data Cache Library and Dependencies -->
+  <script src="js/adaptors/Helpers.js" type="text/javascript"></script>
+  <script src="js/adaptors/DOMStorageAdaptor.js" type="text/javascript"></script>
+  <script src="js/lawnchair.js" type="text/javascript"></script>
   <script src="js/datacache.js" type="text/javascript"></script>
 
   <!-- Offline Handlers -->

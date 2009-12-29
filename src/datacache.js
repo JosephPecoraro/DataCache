@@ -1146,7 +1146,7 @@ CacheEvent.prototype = {
 
         send: function(data) {
             var self = this;
-            var outerArguments;
+            var outerArguments = arguments;
             function action() {
 
                 // Inject our own Network logic

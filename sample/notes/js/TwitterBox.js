@@ -192,7 +192,7 @@ TwitterBox.prototype = {
     },
 
     _sendData: function(method, page) {
-        this.timestamp = +new Date;
+        this.timestamp = Date.now();
         var xhr = new XMLHttpRequest();
         xhr.open(method, page, true);
         var data = 'data=' + encodeURIComponent(this.toJSONString());
@@ -209,13 +209,13 @@ TwitterBox.prototype = {
 
     _deleted: function() {
         console.log('_deleted');
-        this._sendData('DELETE', 'api/');
+        this._sendData('DELETE', 'api/'+this.id);
         this.dispatchEvent('deleted', null, this.toJSONObject());
     },
 
     _updated: function() {
         console.log('_updated');
-        this._sendData('PUT', 'api/');
+        this._sendData('PUT', 'api/'+this.id);
         this.dispatchEvent('updated', null, this.toJSONObject());
     },
 

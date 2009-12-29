@@ -29,7 +29,15 @@ function DataCache(group, origin, version) {
     this.completeness = 'incomplete';
     this.version = version || 0;
 
-    this.managed = {};
+    this.onupdating  = null;
+    this.onfetching  = null;
+    this.oncaptured  = null;
+    this.onreleased  = null;
+    this.onready     = null;
+    this.onobsolete  = null;
+    this.onerror     = null;
+
+    this._managed = {};
 }
 
 DataCache.IDLE = 0;
@@ -122,7 +130,8 @@ DataCache.prototype = {
     },
 
     manage: function(uri, resource) {
-        this.managed[uri] = resource;
+        DataCache.Storage.save({ key: uri, data: resource });
+        this._managed[uri] = true;
     },
 
     removeItem: function(uri) {
@@ -131,7 +140,8 @@ DataCache.prototype = {
     },
 
     removeItemResolved: function(resolvedURI) {
-        delete this.managed[resolvedURI];
+        DataCache.Storage.remove(resolvedURI);
+        delete this._managed[resolvedURI];
     },
 
     getItem: function(uri) {
@@ -140,19 +150,19 @@ DataCache.prototype = {
     },
 
     getItemResolved: function(resolvedURI) {
-        var item = this.managed[resolvedURI];
-        if (!item) {
-            // As close as I can get to a DOMException NOT_FOUND_ERR
+        if (!(resolvedURI in this._managed))
             throw { message: 'DataCache: no such item', code: window.DOMException.NOT_FOUND_ERR };
-        }
 
-        return item;
+        return DataCache.Storage.getSync(resolvedURI).data;
     },
 
     getManagedItems: function() {
         var items = [];
-        for (var uri in this.managed)
-            items.push({ uri: uri, item: this.managed[uri] });
+        for (var uri in this._managed) {
+            var item = DataCache.Storage.getSync(uri).data;
+            items.push({ uri: uri, item: item });
+        }
+
         return items;
     }
 }
@@ -166,9 +176,20 @@ DataCache.GlobalHost = null;      // set later
 DataCache.Offline = false;        // set as determined
 DataCache.TimeoutDuration = 3000; // three seconds
 DataCache.StatusCanBeZero = /^file/.test(window.location.protocol);
+DataCache.Storage = new Lawnchair({adaptor:'dom'});
 
-// TODO: make an XHR request for the current page to determine offline status
-// also, store data in sessionStorage (and timestamp) to carry such data along.
+DataCache.setAsOnline  = function() { DataCache.setOnlineOfflineStatus(false); }
+DataCache.setAsOffline = function() { DataCache.setOnlineOfflineStatus(true);  }
+DataCache.setOnlineOfflineStatus = function(isOffline) {
+    localStorage.setItem('DataCacheAutoDetect', Date.now());
+    if (isOffline != DataCache.Offline) {
+        DataCache.Offline = isOffline;
+        var type = (isOffline ? 'now-offline' : 'now-online');
+        var event = document.createEvent('Event');
+        event.initEvent(type, false, false);
+        document.dispatchEvent(event);
+    }
+}
 
 DataCache.resolveAbsoluteFromBase = function(location, uri) {
 
@@ -207,7 +228,7 @@ DataCache.resolveAbsoluteFromBase = function(location, uri) {
     if (uri.charAt(0) === '/')
         uri = uri.substring(1);
     else {
-        if (currentDir.charAt(currentDir.length-1) == '/')
+        if (currentDir.charAt(currentDir.length-1) === '/')
             str = currentDir.substring(0, currentDir.length-1);
         else
             str = currentDir; // This case is not tested... location.href doesn't end in a slash? can browsers do this?
@@ -262,7 +283,6 @@ DataCache.parseHeaders = function(headersText) {
 }
 
 
-
 // --------------------------------
 //   CacheTransaction (Interface)
 // --------------------------------
@@ -270,7 +290,7 @@ DataCache.parseHeaders = function(headersText) {
 function CacheTransaction(cache) {
     this.cache = cache;
     this.status = CacheTransaction.PENDING;
-    this.oncommitted = function() {};
+    this.oncommitted = null;
 }
 
 CacheTransaction.prototype = {
@@ -410,7 +430,6 @@ OnlineTransaction.prototype = {
     },
 
     _captureSuccess: function(xhr, uri, methods) {
-        // console.log('success', xhr);
         var body = xhr.responseText; // FIXME: binary?
         var type = xhr.getResponseHeader('Content-Type'); // FIXME: determine from filetype as well?
         var headers = DataCache.parseHeaders(xhr.getAllResponseHeaders());
@@ -420,7 +439,6 @@ OnlineTransaction.prototype = {
     },
 
     _captureFailure: function(xhr) {
-        // console.log('failure', xhr);
         this.cache.group.remove(this.cache);
         this.status = CacheTransaction.ABORT;
         if (xhr.status !== 401) {
@@ -470,7 +488,7 @@ function CacheItem(readyState, body, type, dynamicMethods, headers) {
     this.readyState = readyState;
     this.body = body;
     this.type = (type || 'text/plain');
-    this.dynamicMethods = dynamicMethods || [];
+    this.dynamicMethods = (dynamicMethods || []);
     this.headers = (headers || {});
 }
 
@@ -629,9 +647,9 @@ CacheEvent.prototype = {
 }; // semicolon is required
 
 
-// -------------------------------------
-//   Override Default Browser Behavior
-// -------------------------------------
+// ------------------------------------
+//   Embellish Browser Event Behavior
+// ------------------------------------
 
 (function() {
 
@@ -677,6 +695,21 @@ CacheEvent.prototype = {
             event.initEvent(type, false, false);
             event.initCacheEvent(cache, uri);
             document.dispatchEvent(event);
+
+            var convertTable = {
+                'captured': 'oncaptured',
+                'error': 'onerror',
+                'fetching': 'onfetching',
+                'obsolete': 'onobsolete',
+                'off-line-updating': 'onofflineupdating',
+                'ready': 'onready',
+                'released': 'onreleased',
+                'updating': 'onupdating'
+            };
+
+            var attributeListener = cache[convertTable[type]];
+            if (attributeListener)
+                setTimeout(attributeListener, 0, event);
         },
 
         addGroup: function(group) {
@@ -705,8 +738,9 @@ CacheEvent.prototype = {
                 return false;
 
             // Non Dynamic Request, pull from cache, represent as a response
+            // NOTE: a HEAD request should have a null body
             if (item.dynamicMethods.indexOf(method) === -1)
-                return new HttpResponse(200, Http.Status[200], item.body, item.headers);
+                return new HttpResponse(200, Http.Status[200], (method === 'HEAD' ? null : item.body), item.headers);
 
             // Find Specific Candidate Server
             var resolvedURI = DataCache.resolveAbsoluteFromBase(window.location, uri);
@@ -739,7 +773,7 @@ CacheEvent.prototype = {
             var connectivityDetectionTimer = setTimeout(function() {
                 ABORTED = true;
                 xhr.abort();
-                DataCache.Offline = true;
+                DataCache.setAsOffline(); // potential transition to offline
                 var mutableResponse = handleWhenOffline();
                 ixhr.onreadystatechange = oldReadyStateHandler;
                 ixhr.handleHttpResponse(mutableResponse);
@@ -760,7 +794,7 @@ CacheEvent.prototype = {
                         return;
 
                     clearTimeout(connectivityDetectionTimer);
-                    DataCache.Offline = false;
+                    DataCache.setAsOnline(); // potential transition to online
                     var response = self.httpResponseFromXhr(xhr);
                     server.reviewer(request, response);
                     ixhr.onreadystatechange = oldReadyStateHandler;
@@ -857,14 +891,14 @@ CacheEvent.prototype = {
             this._nextVersion++;
             this.add(cache);
             this.status = DataCache.IDLE;
-            DataCacheGroupController.save(this);
+            DataCacheController.save(this);
             return cache;
         },
 
         createLikeRelevant: function() {
             var relevant = this.relevantCache;
             var cache = this.create();
-            cache.managed = deepCopy(relevant.managed);
+            cache._managed = deepCopy(relevant._managed);
             return cache;
         },
 
@@ -957,52 +991,29 @@ CacheEvent.prototype = {
     }
 
 
-    // --------------------------------------------
-    //   DataCacheGroupController (save-and-load)
-    // --------------------------------------------
+    // ---------------------------------------
+    //   DataCacheController (save-and-load)
+    // ---------------------------------------
 
-    DataCacheGroupController = {
-        key: 'datacachegroup',
+    DataCacheController = {
+        key: 'DataCacheController',
 
         load: function() {
-            var jsonString = window.localStorage[DataCacheGroupController.key];
+            var jsonString = window.localStorage.getItem(DataCacheController.key);
             if (!jsonString)
                 return;
 
-            // TODO: Handle managed resources
-            var savedObj = JSON.parse(jsonString);
+            DataCache.Offline = JSON.parse(jsonString);
+
+            // NOTE: This messes with private values (unsafe)
             var host = this._createDataCacheHost();
             var group = this._createDataCacheGroup(host, window.location.host);
-            for (var i in savedObj.v) {
-                var v = savedObj.v[i];
-                group.versions[i] = this._createDataCache(group, v.origin, v.version, v.completeness);
-            }
-
+            var cache = this._createDataCache(group, window.location.host, group._nextVersion++, 'complete');
             return group;
         },
 
         save: function(group) {
-            // TODO: Handle local servers in CacheHost (they are functions...)
-            // TODO: Handle managed resources in DataCache
-            var savedObj = { _nextVersion: group._nextVersion, v: {} };
-            for (var i in group.versions) {
-                var version = group.versions[i];
-                savedObj.v[i] = {
-                    origin: version.origin,
-                    completeness: version.completeness,
-                    version: version.version
-                };
-            }
-
-            var jsonString = JSON.stringify(savedObj);
-            // FIXME: reenable later one
-            // window.localStorage[DataCacheGroupController.key] = jsonString;
-        },
-
-        _createDataCache: function(group, origin, version, completeness) {
-            var cache = new DataCache(group, origin, version);
-            cache.completeness = completeness;
-            return cache;
+            window.localStorage.setItem(DataCacheController.key, JSON.stringify(DataCache.Offline));
         },
 
         _createDataCacheHost: function() {
@@ -1011,6 +1022,22 @@ CacheEvent.prototype = {
 
         _createDataCacheGroup: function(host, origin) {
             return new DataCacheGroup(host, origin);
+        },
+
+        _createDataCache: function(group, origin, version, completeness) {
+            var cache = new DataCache(group, origin, version);
+            cache.completeness = completeness;
+            group.add(cache);
+
+            DataCache.Storage.all(function(all) {
+                for (var i=0, len=all.length; i<len; ++i) {
+                    var r = all[i];
+                    if (typeof r === 'object' && 'key' in r && 'data' in r)
+                        cache._managed[r.key] = true;
+                }
+            });
+
+            return cache;
         }
     }
 
@@ -1026,7 +1053,7 @@ CacheEvent.prototype = {
     // -----------------------
     //   Load DataCacheGroup
     // -----------------------
-    var group = DataCacheGroupController.load();
+    var group = DataCacheController.load();
     if (!group)
         group = new DataCacheGroup(host, origin);
 
@@ -1119,7 +1146,7 @@ CacheEvent.prototype = {
 
         send: function(data) {
             var self = this;
-            var outerArguments;
+            var outerArguments = arguments;
             function action() {
 
                 // Inject our own Network logic
@@ -1229,5 +1256,80 @@ CacheEvent.prototype = {
     window.InterceptableXMLHttpRequest = InterceptableXMLHttpRequest;
     window.XMLHttpRequest = InterceptableXMLHttpRequest;
     window._XMLHttpRequest = _XMLHttpRequest;
+
+
+    // -----------------------------------------
+    //   Online / Offline Transition Detection
+    // -----------------------------------------
+    //
+    //   - localStorage key determines saves time of last check,
+    //     prevents too many useless requests.
+    //
+    //   - make an AJAX request for the current page, avoiding the
+    //     interception handling above, we set the status accordingly.
+    //     NOTE: we need to bust through the cache for Firefox,
+    //     so we add a timestamp to the request.
+    //
+    //       Firefox and WebKit differ:
+    //         - FF rarely calls onerror, so the timeout happens
+    //         - WebKit fires onerror, timeout rarely happens
+    //
+    //   - check every now and again, to trigger an Online/Offline
+    //     transition event in case of a connectivity change.
+    //
+
+    window.addEventListener('load', function() {
+
+        // Constants
+        // NOTE: Idea: make this an exponential back off?
+        var cutoffDuration = 30000;
+        var repeatDuration = 60000;
+
+        function autoDetect() {
+
+            // If this type of check was already made within the last 30 seconds
+            // then don't bother checking. (Reduce the number of requests).
+            var now = Date.now();
+            var key = 'DataCacheAutoDetect';
+            var loc = window.location;
+            var uri = loc.href + (loc.search.length > 0 ? '&' : '?') + 'cachebuster=' + now;
+            var cutoff = now - cutoffDuration;
+            var lastAttempt = localStorage.getItem(key);
+            if (lastAttempt && parseInt(lastAttempt) > cutoff)
+                return;
+
+            // Make the dummy request, which will automatically flip if connectivity
+            // has changed. NOTE: this is a raw XMLHttpRequest
+            var xhr = new _XMLHttpRequest();
+            xhr.open("HEAD", uri, true);
+
+            // Duplicated Abort Algorithm to avoid DataCache and LocalServer issues.
+            // Contains simplified monitoring (timeout / error / load)
+            var ABORTED = false;
+            var connectivityDetectionTimer = setTimeout(function() {
+                ABORTED = true; xhr.abort();
+                DataCache.setAsOffline();
+            }, DataCache.TimeoutDuration);
+
+            xhr.onerror = function() {
+                clearTimeout(connectivityDetectionTimer);
+                DataCache.setAsOffline();
+            }
+
+            xhr.onload = function() {
+                if (ABORTED) return;
+                clearTimeout(connectivityDetectionTimer);
+                DataCache.setAsOnline();
+                localStorage.setItem(key, Date.now());
+            }
+
+            xhr.send();
+        }
+
+        // Check repeatedly
+        setInterval(autoDetect, repeatDuration);
+        autoDetect();
+
+    }, false);
 
 })();

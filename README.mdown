@@ -15,7 +15,7 @@ Supported Browsers:
 This project is Free and Open Source. Please expand, fork, suggest merges,
 and provide feedback or advice.
 
-Copyright &copy; 2009 Joseph Pecoraro, released under the MIT license
+Copyright &copy; 2009-2010 Joseph Pecoraro, released under the MIT license
 
 ### Improvements / Modifications made by the Library
 

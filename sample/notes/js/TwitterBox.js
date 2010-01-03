@@ -196,7 +196,7 @@ TwitterBox.prototype = {
         var xhr = new XMLHttpRequest();
         xhr.open(method, page, true);
         var data = 'data=' + encodeURIComponent(this.toJSONString());
-        xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
         xhr.onload = function() { console.log('success', xhr, xhr.responseText); }
         xhr.onerror = function() { console.log('error', xhr, xhr.responseText); }
         xhr.send(data);

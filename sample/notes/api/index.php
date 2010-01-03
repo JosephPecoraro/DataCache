@@ -34,7 +34,7 @@ function retrieve() {
   $arr = array();
   while ($record = mysql_fetch_assoc($result))
     $arr[] = $record;
-  header('Content-type: application/json');
+  header('Content-Type: application/json');
   echo json_encode($arr);
 }
 

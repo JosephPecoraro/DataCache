@@ -184,6 +184,7 @@ DataCache.setOnlineOfflineStatus = function(isOffline) {
     localStorage.setItem('DataCacheAutoDetect', Date.now());
     if (isOffline != DataCache.Offline) {
         DataCache.Offline = isOffline;
+        DataCacheController.save();
         var type = (isOffline ? 'now-offline' : 'now-online');
         var event = document.createEvent('Event');
         event.initEvent(type, false, false);
@@ -891,7 +892,6 @@ CacheEvent.prototype = {
             this._nextVersion++;
             this.add(cache);
             this.status = DataCache.IDLE;
-            DataCacheController.save(this);
             return cache;
         },
 
@@ -1012,7 +1012,7 @@ CacheEvent.prototype = {
             return group;
         },
 
-        save: function(group) {
+        save: function() {
             window.localStorage.setItem(DataCacheController.key, JSON.stringify(DataCache.Offline));
         },
 
@@ -1282,10 +1282,10 @@ CacheEvent.prototype = {
 
         // Constants
         // NOTE: Idea: make this an exponential back off?
-        var cutoffDuration = 30000;
-        var repeatDuration = 60000;
+        var cutoffDuration = 9000;
+        var repeatDuration = 10000;
 
-        function autoDetect() {
+        function autoDetect(force) {
 
             // If this type of check was already made within the last 30 seconds
             // then don't bother checking. (Reduce the number of requests).
@@ -1293,10 +1293,12 @@ CacheEvent.prototype = {
             var key = 'DataCacheAutoDetect';
             var loc = window.location;
             var uri = loc.href + (loc.search.length > 0 ? '&' : '?') + 'cachebuster=' + now;
-            var cutoff = now - cutoffDuration;
-            var lastAttempt = localStorage.getItem(key);
-            if (lastAttempt && parseInt(lastAttempt) > cutoff)
-                return;
+            if (!force) {
+                var cutoff = now - cutoffDuration;
+                var lastAttempt = localStorage.getItem(key);
+                if (lastAttempt && parseInt(lastAttempt) > cutoff)
+                    return;
+            }
 
             // Make the dummy request, which will automatically flip if connectivity
             // has changed. NOTE: this is a raw XMLHttpRequest
@@ -1328,7 +1330,7 @@ CacheEvent.prototype = {
 
         // Check repeatedly
         setInterval(autoDetect, repeatDuration);
-        autoDetect();
+        autoDetect(true);
 
     }, false);
 

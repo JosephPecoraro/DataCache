@@ -5,8 +5,6 @@
 
 /*
  * TODO: Synchronization
- *
- * TODO: Review (link offline + online)
  */
 
 // ------------------------
@@ -112,11 +110,15 @@
 
     navigator.registerOfflineHandler(apiURI, interceptor, reviewer);
 
-    function reviewer(request, response) {
-        // Do nothing yet.
+    function reviewer(request, response) { console.log('INSIDE REVIEWER with', request.method); // temp debug
+        var handler = reviewer[request.method.toUpperCase()];
+        if (handler) {
+            handler(request, response);
+            return;
+        }
     }
 
-    function interceptor(request, response) {
+    function interceptor(request, response) { console.log('INSIDE INTERCEPTOR with', request.method); // temp debug
 
         // Basic Handling
         if (handlingLevel === 'basic' && request.method.toUpperCase() !== 'GET') {
@@ -140,11 +142,11 @@
     }
 
 
-    // ------------------------
-    //   CRUD / REST Handlers
-    // ------------------------
+    // ----------------------
+    //   Generic Management
+    // ----------------------
 
-    interceptor.POST = function(request, response) {
+    function saveItem(request) {
         var obj = parseBoxObjectFromRequest(request.bodyText);
         cache.offlineTransaction(function(tx) {
             var key = apiURI+obj.id;
@@ -152,10 +154,22 @@
             tx.capture(key, request.bodyText, request.headers['Content-Type'], dynamicMethods);
             tx.commit();
         });
-
-        response.setStatus(201, Http.Status[201]);
-        response.send();
     }
+
+    function releaseItem(request) {
+        var obj = parseBoxObjectFromRequest(request.bodyText);
+        cache.offlineTransaction(function(tx) {
+            var key = apiURI+obj.id;
+            savedItems.remove(key);
+            tx.release(key);
+            tx.commit();
+        });
+    }
+
+
+    // ------------------------
+    //   CRUD / REST Handlers
+    // ------------------------
 
     interceptor.GET = function(request, response) {
         var tx = cache.transactionSync();
@@ -165,7 +179,7 @@
                 var body = tx.cache.getItem(key).body; // FIXME: Private API, synchronous...
                 var obj = parseBoxObjectFromRequest(body);
                 arr.push(obj)
-            } catch (e) {} // ignored 
+            } catch (e) {} // ignored
         }
 
         response.setStatus(200, Http.Status[200]);
@@ -173,29 +187,55 @@
         response.send();
     }
 
-    interceptor.PUT = function(request, response) {
-        var obj = parseBoxObjectFromRequest(request.bodyText);
-        cache.offlineTransaction(function(tx) {
-            var key = apiURI+obj.id;
-            tx.capture(key, request.bodyText, request.headers['Content-Type'], dynamicMethods);
-            tx.commit();
-        });
+    interceptor.POST = function(request, response) {
+        saveItem(request);
+        response.setStatus(201, Http.Status[201]);
+        response.send();
+    }
 
+    interceptor.PUT = function(request, response) {
+        saveItem(request, false);
         response.setStatus(200, Http.Status[200]);
         response.send();
     }
 
     interceptor.DELETE = function(request, response) {
-        var obj = parseBoxObjectFromRequest(request.bodyText);
-        cache.offlineTransaction(function(tx) {
-            var key = apiURI+obj.id;
-            savedItems.remove(key);
-            tx.release(key);
-            tx.commit();
-        });
-
+        releaseItem(request);
         response.setStatus(200, Http.Status[200]);
         response.send();
+    }
+
+
+    // -------------
+    //   Reviewers
+    // -------------
+
+    reviewer.GET = function(request, response) {
+        var o = null;
+        try { o = JSON.parse(response.bodyText); } catch (e) { console.log(response); return; }
+        if (!o) return;
+
+        // Locally cache each object from the server
+        for (var i=0, len=o.length; i<len; ++i) {
+            var obj = o[i];
+            cache.offlineTransaction(function(tx) {
+                var key = apiURI+obj.id;
+                savedItems.add(key);
+                var bodyText = 'data=' + encodeURIComponent(JSON.stringify(obj));
+                tx.capture(key, bodyText, 'application/json', dynamicMethods);
+                tx.commit();
+            });
+        }
+    }
+
+    reviewer.POST = reviewer.PUT = function(request, response) {
+        if (response.statusCode < 400)
+            saveItem(request);
+    }
+
+    reviewer.DELETE = function(request, response) {
+        if (response.statusCode < 400)
+            releaseItem(request);
     }
 
 

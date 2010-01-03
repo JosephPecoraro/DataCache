@@ -18,8 +18,30 @@
 //     DataCache.Offline = true;
 // }, false);
 
+
 // Prevent Namespace Collisions
 (function() {
+
+    // -----------------
+    //   UI Indicators
+    // -----------------
+
+    function indicateOnline()  { indicate('green', 'online'); }
+    function indicateOffline() { indicate('red', 'offline');  }
+    function indicate(color, text) {
+        var elem = document.getElementById('connectivity');
+        elem.style.backgroundColor = color;
+        elem.innerHTML = text;
+    }
+
+    document.addEventListener('now-online', indicateOnline, false);
+    document.addEventListener('now-offline', indicateOffline, false);
+    window.addEventListener('load', function() {
+        setTimeout(function() {
+            (DataCache.Offline ? indicateOffline() : indicateOnline());
+        }, 500); // latency is for the initial automated check
+    }, false);
+
 
     // ------------------------
     //   Table of Saved Items

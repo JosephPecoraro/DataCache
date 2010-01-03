@@ -11,6 +11,13 @@
 
     (function() {
 
+        // For browsers that do not support ApplicationCache (like Chrome)
+        // then break, so they don't see any errors.
+        if (!window.applicationCache) {
+          console.warn('This Browser does not support ApplicationCache');
+          return;
+        }
+
         var statuses = [];
         statuses[applicationCache.UNCACHED]    = 'UNCACHED';
         statuses[applicationCache.IDLE]        = 'IDLE';

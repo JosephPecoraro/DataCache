@@ -53,8 +53,9 @@ function update($data) {
 
 function delete($data) {
   $o = decode($data['data']);
+  $id = (isset($o['id']) ? $o['id'] : $_GET['id']); // fallback
   $sql = sprintf("delete from `drafts` where `id` = %d limit 1",
-    mysql_real_escape_string($o['id']));
+    mysql_real_escape_string($id));
   mysql_query($sql) or die(mysql_error());
   headercode(200);
 }

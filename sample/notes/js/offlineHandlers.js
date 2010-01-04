@@ -219,15 +219,19 @@
         if (!o) return;
 
         // Locally cache each object from the server
+        // Since the offlineTransaction is async, prevent closure mistakes
+        // by running it in a function where all the dynamic variables (obj)
+        // are passed in and thus made static.
         for (var i=0, len=o.length; i<len; ++i) {
-            var obj = o[i];
-            cache.offlineTransaction(function(tx) {
-                var key = apiURI+obj.id;
-                savedItems.add(key);
-                var bodyText = 'data=' + encodeURIComponent(JSON.stringify(obj));
-                tx.capture(key, bodyText, 'application/json', dynamicMethods);
-                tx.commit();
-            });
+            (function(obj) {
+                cache.offlineTransaction(function(tx) {
+                    var key = apiURI+obj.id;
+                    savedItems.add(key);
+                    var bodyText = 'data=' + encodeURIComponent(JSON.stringify(obj));
+                    tx.capture(key, bodyText, 'application/json', dynamicMethods);
+                    tx.commit();
+                });
+            })(o[i]);
         }
     }
 

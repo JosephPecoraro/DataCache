@@ -5,11 +5,12 @@ Improvements / Changes over the Specification:
     been detected.
     
     BEWARE: these are very similar to the "online" and "offline" events
-    introduced in Firefox 3, [described here on MDC][oevents]. For now,
-    I will not transition to these events to prevent duplicate invokations.
-    Developers that wish to use both, may simply register the same
-    handler to both events, and be aware of the potential for duplication.
-    
+    introduced in Application Cache, [described here on MDC][oevents]
+    and [here in HTML5][ohtml5]. For now, I will not transition to these
+    events to prevent duplicate invokations. Developers that wish to use
+    both, may simply register the same handler to both events, and be aware
+    of the potential for duplication.
+
         function handler() { ... }
         document.addEventListener('online', handler, false);
         document.addEventListener('now-online', handler, false);
@@ -38,3 +39,4 @@ Improvements / Changes over the Specification:
      new data cache for an online transation.
 
 [oevents]: https://developer.mozilla.org/en/Online%2f%2fOffline_Events
+[ohtml5]: http://www.whatwg.org/specs/web-apps/current-work/multipage/offline.html#browser-state

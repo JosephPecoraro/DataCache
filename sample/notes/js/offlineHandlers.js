@@ -176,9 +176,12 @@
         var arr = [];
         for (var key in savedItems.items) {
             try {
-                var body = tx.cache.getItem(key).body; // FIXME: Private API, synchronous...
-                var obj = parseBoxObjectFromRequest(body);
-                arr.push(obj)
+                var item = tx.cache.getItem(key); // FIXME: Private API, needed because its synchronous...
+                if (item.readyState !== CacheItem.GONE) {
+                    var body = item.body;
+                    var obj = parseBoxObjectFromRequest(body);
+                    arr.push(obj);
+                }
             } catch (e) {} // ignored
         }
 

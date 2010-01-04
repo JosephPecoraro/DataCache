@@ -3,6 +3,16 @@ Improvements / Changes over the Specification:
   - `now-online` and `now-offline` transition events fired at the cache host
     level (so `document` for my library) when a connectivity transition has
     been detected.
+    
+    BEWARE: these are very similar to the "online" and "offline" events
+    introduced in Firefox 3, [described here on MDC][oevents]. For now,
+    I will not transition to these events to prevent duplicate invokations.
+    Developers that wish to use both, may simply register the same
+    handler to both events, and be aware of the potential for duplication.
+    
+        function handler() { ... }
+        document.addEventListener('online', handler, false);
+        document.addEventListener('now-online', handler, false);
 
   - `DataCache.getManagedItems` returns an Array of all the items stored in
     the particular cache, with the form:
@@ -26,3 +36,5 @@ Improvements / Changes over the Specification:
   - `window.openNewDataCache()` forces creating a new data cache with
      a new version number. This uses the same algorithm as creating a
      new data cache for an online transation.
+
+[oevents]: https://developer.mozilla.org/en/Online%2f%2fOffline_Events

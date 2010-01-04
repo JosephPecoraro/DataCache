@@ -3,10 +3,6 @@
  * Joseph Pecoraro
  */
 
-/*
- * TODO: Synchronization
- */
-
 // ------------------------
 //   Fake Offline Testing
 // ------------------------
@@ -31,6 +27,10 @@
         elem.style.backgroundColor = color;
         elem.innerHTML = text;
     }
+
+    document.getElementById('connectivity').addEventListener('click', function() {
+        (DataCache.Offline ? DataCache.setAsOnline() : DataCache.setAsOffline());
+    }, false);
 
     document.addEventListener('now-online', indicateOnline, false);
     document.addEventListener('now-offline', indicateOffline, false);
@@ -72,6 +72,43 @@
     }
 
 
+    // --------------
+    //   Checkpoint
+    // --------------
+    // NOTE: This stores in localStorage the version number of
+    // the cache we last synchronized with the server, as well
+    // as the changes since that point.
+    //
+    // FIXME: This feels like a hack. I think this is something
+    // the DataCache library should provide for us.
+
+    function CheckPoint() {
+        this.version = window.localStorage.getItem(CheckPoint.STORAGEKEY);
+        this._changed = {};
+        this._created = {};
+        this._deleted = {};
+    }
+
+    CheckPoint.STORAGEKEY = 'checkpoint';
+
+    CheckPoint.prototype = {
+        set: function(version) {
+            this._changed = {};
+            this._created = {};
+            this._deleted = {};
+            this.version = version;
+            window.localStorage.setItem(CheckPoint.STORAGEKEY, this.version);
+        },
+
+        changed: function(uri) { this._changed[DataCache.resolveAbsoluteFromBase(window.location, uri)] = true; },
+        created: function(uri) { this._created[DataCache.resolveAbsoluteFromBase(window.location, uri)] = true; },
+        deleted: function(uri) { this._deleted[DataCache.resolveAbsoluteFromBase(window.location, uri)] = true; },
+        wasChanged: function(resolvedURI) { return !!this._changed[resolvedURI]; },
+        wasCreated: function(resolvedURI) { return !!this._created[resolvedURI]; },
+        wasDeleted: function(resolvedURI) { return !!this._deleted[resolvedURI]; }
+    }
+
+
     // -----------
     //   States
     // -----------
@@ -79,6 +116,9 @@
     var apiURI = 'api/';
     var dynamicMethods = ['GET', 'POST', 'PUT', 'DELETE'];
     var handlingLevel = null; // set later
+
+    var savedItems = new SavedItems();
+    var checkpoint = new CheckPoint();
 
 
     // ----------------------------------
@@ -96,7 +136,6 @@
     //   Register a Handler for requests made to this api
     // ----------------------------------------------------
 
-    var savedItems = new SavedItems();
     var cache = window.openDataCache();
     cache.offlineTransaction(function(tx) {
         tx.capture(apiURI, null, null, dynamicMethods);
@@ -146,10 +185,11 @@
     //   Generic Management
     // ----------------------
 
-    function saveItem(request) {
+    function saveItem(request, wasCreated) {
         var obj = parseBoxObjectFromRequest(request.bodyText);
+        var key = apiURI+obj.id;
+        (wasCreated ? checkpoint.created(key) : checkpoint.changed(key));
         cache.offlineTransaction(function(tx) {
-            var key = apiURI+obj.id;
             savedItems.add(key);
             tx.capture(key, request.bodyText, request.headers['Content-Type'], dynamicMethods);
             tx.commit();
@@ -158,8 +198,9 @@
 
     function releaseItem(request) {
         var obj = parseBoxObjectFromRequest(request.bodyText);
+        var key = apiURI+obj.id;
+        checkpoint.deleted(key);
         cache.offlineTransaction(function(tx) {
-            var key = apiURI+obj.id;
             savedItems.remove(key);
             tx.release(key);
             tx.commit();
@@ -191,7 +232,7 @@
     }
 
     interceptor.POST = function(request, response) {
-        saveItem(request);
+        saveItem(request, true);
         response.setStatus(201, Http.Status[201]);
         response.send();
     }
@@ -268,5 +309,61 @@
         var hash = parseQueryData(data);
         return JSON.parse(hash.data);
     }
+
+
+    // -------------------
+    //   Synchronization
+    // -------------------
+
+    // Transitioning to Offline
+    // Store the current version in the checkpoint, and update
+    // the "cache" being used by the interceptor / reviewers
+    document.addEventListener('now-offline', function() {
+        checkpoint.set(cache.version);
+        cache = window.openNewDataCache();
+        cache.swapCache();
+    }, false);
+
+    // Transitioning to Online
+    // Update each modified resource
+    document.addEventListener('now-online', function() {
+
+        if (checkpoint.version === cache.version)
+            return;
+
+        var itemCount = 0;
+        var highVersion = cache.version;
+
+        // FIXME: going back all the way (null) because we cannot
+        // trust the previous versions. This will be investigated.
+        cache.eachModificationSince(null, itemCallback, successCallback);
+
+        function itemCallback(item, uri) {
+            var method = null;
+            if (checkpoint.wasCreated(uri))
+                method = 'POST';
+            else if (checkpoint.wasDeleted(uri))
+                method = 'DELETE';
+            else if (checkpoint.wasChanged(uri))
+                method = 'PUT';
+            else
+                return;
+
+            itemCount++;
+            var xhr = new XMLHttpRequest();
+            xhr.open(method, uri, false); // Synchronous for testing
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.setRequestHeader('X-Bypass-DataCache', 'true'); // purposely avoid the DataCache!
+            xhr.onload = function() { console.log('Xsuccess', xhr, xhr.responseText); }
+            xhr.onerror = function() { console.log('Xerror', xhr, xhr.responseText); } // FIXME: in case of sync error
+            xhr.send(item.body);
+        }
+
+        function successCallback() {
+            console.log('successly resynchronized/updated %d items', itemCount);
+            checkpoint.set(highVersion);
+        }
+
+    }, false);
 
 })();

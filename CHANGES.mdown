@@ -22,3 +22,7 @@ Improvements / Changes over the Specification:
   - A standard set of Http Status values in `Http.Status`. For example:
   
         response.setStatus(200, Http.Status[200]); // "OK"
+
+  - `window.openNewDataCache()` forces creating a new data cache with
+     a new version number. This uses the same algorithm as creating a
+     new data cache for an online transation.

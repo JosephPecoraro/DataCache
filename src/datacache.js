@@ -182,7 +182,7 @@ DataCache.setAsOnline  = function() { DataCache.setOnlineOfflineStatus(false); }
 DataCache.setAsOffline = function() { DataCache.setOnlineOfflineStatus(true);  }
 DataCache.setOnlineOfflineStatus = function(isOffline) {
     localStorage.setItem('DataCacheAutoDetect', Date.now());
-    if (isOffline != DataCache.Offline) {
+    if (isOffline !== DataCache.Offline) {
         DataCache.Offline = isOffline;
         DataCacheController.save();
         var type = (isOffline ? 'now-offline' : 'now-online');
@@ -962,7 +962,7 @@ CacheEvent.prototype = {
                 olderCache = this._nextLowerCache(oldVersion);
             }
 
-            // Remove items that are in the low cache (to keep "since" list small);
+            // Remove items that are in the low cache
             var lowCache = this.versions[lowVersion];
             if (lowCache) {
                 var managedItems = lowCache.getManagedItems();
@@ -1078,6 +1078,10 @@ CacheEvent.prototype = {
     // ----------------------------
     //   Public Non-Standard APIs
     // ----------------------------
+
+    window.openNewDataCache = function openNewDataCache() {
+        return group.createLikeRelevant();
+    }
 
     navigator.removeRegisteredOfflineHandlers = function() {
         DataCache.GlobalHost._servers = [];
@@ -1282,8 +1286,8 @@ CacheEvent.prototype = {
 
         // Constants
         // NOTE: Idea: make this an exponential back off?
-        var cutoffDuration = 9000;
         var repeatDuration = 10000;
+        var cutoffDuration = repeatDuration / 2;
 
         function autoDetect(force) {
 

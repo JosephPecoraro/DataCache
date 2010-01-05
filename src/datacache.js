@@ -290,6 +290,7 @@ DataCache.parseHeaders = function(headersText) {
 
 function CacheTransaction(cache) {
     this.cache = cache;
+    cache.completeness = 'incomplete';
     this.status = CacheTransaction.PENDING;
     this.oncommitted = null;
 }
@@ -325,6 +326,7 @@ CacheTransaction.prototype = {
         var cache = this.cache;
         var group = cache.group;
 
+        cache.completeness = 'complete';
         group.update(cache);
         this.status = CacheTransaction.COMMITTED;
 

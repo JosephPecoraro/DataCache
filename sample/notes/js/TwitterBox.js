@@ -98,6 +98,9 @@ function TwitterBox(id, x, y, z, timestamp, content) {
     this.timestamp = timestamp || +new Date;
     content = content || '...';
 
+    // Add to the table
+    TwitterBox.table[id] = this;
+
     // UI listeners
     this.rawdblclick = bindFunc(this.dblclick, this);
     this.rawmousedown = bindFunc(this.mousedown, this);
@@ -149,10 +152,11 @@ TwitterBox.prototype = {
         this._updated();
     },
 
-    setText: function(txt) {
+    setText: function(txt, avoidUpdate) {
         this.bodyElement.textContent = txt;
         this.updateCount();
-        this._updated();
+        if (!avoidUpdate)
+            this._updated();
     },
 
     hide: function() {
@@ -166,9 +170,11 @@ TwitterBox.prototype = {
         }
     },
 
-    dispose: function() {
-        this._deleted();
+    dispose: function(avoidUpdate) {
+        if (!avoidUpdate)
+            this._deleted();
         this.boxElement.parentNode.removeChild(this.boxElement);
+        delete TwitterBox.table[this.id];
     },
 
     updateCount: function() {
@@ -320,15 +326,41 @@ TwitterBox.prototype = {
             elem.textContent = oldText;
             cleanup();
         }
+    },
+
+    animationFor: function(o) {
+        var x = o.x;
+        var y = o.y;
+        if (this.x !== x || this.y !== y) {
+            var style = this.boxElement.style;
+            return {
+                element: this.boxElement,
+                start: { left: this.x, top: this.y },
+                end: { left: x, top: y }
+            };
+        }
+
+        return null;
+    },
+
+    updateFromJSON: function(o) {
+        // NOTE: we don't actually move
+        this.x = o.x;
+        this.y = o.y;
+        this.z = o.z;
+        this.timestamp = o.timestamp;
+        this.setText(o.content, true);
     }
 }
 
 TwitterBox.prototype.__proto__ = EventQueue.prototype;
 
+
 // ----------------------
 //   TwitterBox Factory
 // ----------------------
 
+TwitterBox.table = {};
 TwitterBox.height = 90;
 TwitterBox.shift = 20;
 TwitterBox.nextId = 0;
@@ -355,12 +387,6 @@ TwitterBox.createBox = function() {
 }
 
 TwitterBox.fromJSON = function(o) {
-    o.timestamp = parseInt(o.timestamp);
-    o.id = parseInt(o.id);
-    o.x = parseInt(o.x);
-    o.y = parseInt(o.y);
-    o.z = parseInt(o.z);
-
     if (o.id >= TwitterBox.nextId)
         TwitterBox.nextId = o.id+1;
     if (o.z >= TwitterBox.nextZ)
@@ -369,25 +395,139 @@ TwitterBox.fromJSON = function(o) {
 }
 
 
+// ----------------------
+//   TwitterBox Loader
+// ----------------------
+
+TwitterBox.Pull = function() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'api/');
+    xhr.onerror = function() { console.log('failed', xhr); } // to be intercepted.
+    xhr.onload = process;
+    xhr.send();
+
+    function process() {
+        var json = JSON.parse(xhr.responseText);
+        if (!json)
+            return;
+
+        var animations = [];
+        var boxes = document.querySelectorAll('.box');
+
+        // Create New Boxes and Animating Existing Boxes
+        for (var i=0, len=json.length; i<len; ++i) {
+
+            var o = json[i];
+            o.timestamp = parseInt(o.timestamp);
+            o.id = parseInt(o.id);
+            o.x = parseInt(o.x);
+            o.y = parseInt(o.y);
+            o.z = parseInt(o.z);
+
+            var existingBox = TwitterBox.table[o.id];
+            if (!existingBox)
+                TwitterBox.fromJSON(o);
+            else {
+                var animation = existingBox.animationFor(o);
+                if (animation)
+                    animations.push(animation);
+                existingBox.updateFromJSON(o);
+                existingBox.boxElement.handled = true;
+            }
+        }
+
+        // Start the animation
+        if (animations.length > 0)
+            TwitterBox.animate(animations, 500);
+
+        // Take care of any of the Boxes that were deleted (non-handled)
+        for (var i=0, len=boxes.length; i<len; ++i) {
+            var boxElement = boxes[i];
+            if (boxElement.handled)
+                delete boxElement.handled;
+            else
+                TwitterBox.table[parseInt(boxElement.id.substring(4))].dispose(true);
+        }
+    }
+}
+
+
+// ---------------------
+//   Generic Animation
+// ---------------------
+// Attribution: This is a modified version of the code from the WebKit Open
+// Source Project (specifically from the Web Inspector). I have contributed to
+// that project, including specifically modifying the function below.
+//
+// Sample Usage:
+//
+//   var animations = [
+//       {element: document.getElementById('one'), start: {height:1}, end: {height:200}},
+//       {element: document.getElementById('two'), start: {bottom:1}, end: {bottom:200}}
+//   ];
+//
+//   TwitterBox.animate(animations, 1000);
+
+TwitterBox.animate = function(animations, duration, callback) {
+
+    var interval;
+    var complete = 0;
+    var defaultUnit = 'px';
+    var propertyUnit = { opacity: '' };
+    var animationsLength = animations.length;
+    var intervalDuration = (1000/30); // 30 frames per second.
+
+    function cubicInOut(t, b, c, d) {
+        if ((t/=d/2) < 1) return c/2*t*t*t + b;
+        return c/2*((t-=2)*t*t + 2) + b;
+    }
+
+    for (var i=0; i<animationsLength; ++i) {
+        var a = animations[i];
+        for (var key in a.start)
+            a.start[key] = parseInt(a.start[key]);
+        for (var key in a.end)
+            a.end[key] = parseInt(a.end[key]);
+    }
+
+    function animateLoop() {
+        complete += intervalDuration;
+        var next = complete + intervalDuration;
+
+        for (var i=0; i < animationsLength; ++i) {
+            var animation = animations[i];
+            var element = animation.element;
+            var start = animation.start;
+            var end = animation.end;
+            if (!element)
+                continue;
+
+            var style = element.style;
+            for (var key in end) {
+                var endValue = end[key];
+                if (next < duration) {
+                    var startValue = start[key];
+                    var newValue = cubicInOut(complete, startValue, endValue - startValue, duration);
+                    style[key] = newValue + (key in propertyUnit ? propertyUnit[key] : defaultUnit);
+                } else
+                    style[key] = endValue + (key in propertyUnit ? propertyUnit[key] : defaultUnit);
+            }
+        }
+
+        if (complete >= duration) {
+            clearInterval(interval);
+            if (callback)
+                callback();
+        }
+    }
+
+    interval = setInterval(animateLoop, intervalDuration);
+    animateLoop();
+}
+
+
 // --------------
 //   Load State
 // --------------
 
-window.addEventListener('load', function() {
-
-    // Load JSON from state.php
-    // and turn into objects.
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', 'api/');
-    xhr.onerror = function() { console.log('failed', xhr); } // to be intercepted.
-    xhr.onload = function() {
-        var o = JSON.parse(xhr.responseText);
-        if (!o)
-            return;
-
-        for (var i=0, len=o.length; i<len; ++i)
-            TwitterBox.fromJSON(o[i]);
-    }
-    xhr.send();
-
-}, false);
+window.addEventListener('load', TwitterBox.Pull, false);

@@ -72,40 +72,87 @@
     }
 
 
-    // --------------
-    //   Checkpoint
-    // --------------
-    // NOTE: This stores in localStorage the version number of
-    // the cache we last synchronized with the server, as well
-    // as the changes since that point.
-    //
-    // FIXME: This feels like a hack. I think this is something
-    // the DataCache library should provide for us.
+    // ----------------
+    //   RequestQueue
+    // ----------------
+    // NOTE: This stores in localStorage the information we need to store
+    // and replay a list of actions made by the user.
 
-    function CheckPoint() {
-        this.version = window.localStorage.getItem(CheckPoint.STORAGEKEY);
-        this._changed = {};
-        this._created = {};
-        this._deleted = {};
+    function RequestQueue() {
+        this._reset();
+        this._load();
     }
 
-    CheckPoint.STORAGEKEY = 'checkpoint';
+    RequestQueue.STORAGEKEY = 'RequestQueue';
 
-    CheckPoint.prototype = {
-        set: function(version) {
-            this._changed = {};
-            this._created = {};
-            this._deleted = {};
-            this.version = version;
-            window.localStorage.setItem(CheckPoint.STORAGEKEY, this.version);
+    RequestQueue.prototype = {
+        _reset: function() {
+            this.uris = {};
+            this.queue = [];
+            this.offset = 0;
         },
 
-        changed: function(uri) { this._changed[DataCache.resolveAbsoluteFromBase(window.location, uri)] = true; },
-        created: function(uri) { this._created[DataCache.resolveAbsoluteFromBase(window.location, uri)] = true; },
-        deleted: function(uri) { this._deleted[DataCache.resolveAbsoluteFromBase(window.location, uri)] = true; },
-        wasChanged: function(resolvedURI) { return !!this._changed[resolvedURI]; },
-        wasCreated: function(resolvedURI) { return !!this._created[resolvedURI]; },
-        wasDeleted: function(resolvedURI) { return !!this._deleted[resolvedURI]; }
+        reset: function() {
+            this._reset();
+            this._store();
+        },
+
+        enqueue: function(uri, method) {
+            method = method.toUpperCase();
+            if (uri in this.uris) {
+                if (method === 'DELETE') {
+                    this.queue[this.uris[uri]].method = method;
+                    this._store();
+                }
+
+                return;
+            }
+
+            var index = this.queue.length;
+            this.queue.push({ uri: uri, method: method });
+            this.uris[uri] = index;
+            this._store();
+        },
+
+        process: function(itemCallback, successCallback, errorCallback) {
+            for (var i=this.offset, len=this.queue.length; i<len; ++i) {
+                var item = this.queue[i];
+                delete this.uris[item.uri];
+
+                if (itemCallback(item.uri, item.method) === false) {
+                    if (errorCallback)
+                        errorCallback();
+                    this.uris[item.uri] = i;
+                    this.offset = i;
+                    this._store();
+                    return;
+                }
+            }
+
+            if (successCallback)
+                successCallback();
+
+            this.reset();
+            this._store();
+        },
+
+        _store: function() {
+            window.localStorage.setItem(RequestQueue.STORAGEKEY, JSON.stringify({
+                uris: this.uris,
+                queue: this.queue,
+                offset: this.offset
+            }));
+        },
+
+        _load: function() {
+            var obj = window.localStorage.getItem(RequestQueue.STORAGEKEY);
+            if (obj) {
+                obj = JSON.parse(obj);
+                this.queue = obj.queue;
+                this.uris = obj.uris;
+                this.offset = obj.offset;
+            }
+        }
     }
 
 
@@ -118,7 +165,7 @@
     var handlingLevel = null; // set later
 
     var savedItems = new SavedItems();
-    var checkpoint = new CheckPoint();
+    var queue = new RequestQueue();
 
 
     // ----------------------------------
@@ -185,10 +232,11 @@
     //   Generic Management
     // ----------------------
 
-    function saveItem(request, wasCreated) {
+    function saveItem(request, method) {
         var obj = parseBoxObjectFromRequest(request.bodyText);
         var key = apiURI+obj.id;
-        (wasCreated ? checkpoint.created(key) : checkpoint.changed(key));
+        if (method)
+            queue.enqueue(key, method);
         cache.offlineTransaction(function(tx) {
             savedItems.add(key);
             tx.capture(key, request.bodyText, request.headers['Content-Type'], dynamicMethods);
@@ -196,10 +244,11 @@
         });
     }
 
-    function releaseItem(request) {
+    function releaseItem(request, method) {
         var obj = parseBoxObjectFromRequest(request.bodyText);
         var key = apiURI+obj.id;
-        checkpoint.deleted(key);
+        if (method)
+            queue.enqueue(key, method);
         cache.offlineTransaction(function(tx) {
             savedItems.remove(key);
             tx.release(key);
@@ -232,19 +281,19 @@
     }
 
     interceptor.POST = function(request, response) {
-        saveItem(request, true);
+        saveItem(request, 'POST');
         response.setStatus(201, Http.Status[201]);
         response.send();
     }
 
     interceptor.PUT = function(request, response) {
-        saveItem(request, false);
+        saveItem(request, 'PUT');
         response.setStatus(200, Http.Status[200]);
         response.send();
     }
 
     interceptor.DELETE = function(request, response) {
-        releaseItem(request);
+        releaseItem(request, 'DELETE');
         response.setStatus(200, Http.Status[200]);
         response.send();
     }
@@ -315,41 +364,19 @@
     //   Synchronization
     // -------------------
 
-    // Transitioning to Offline
-    // Store the current version in the checkpoint, and update
-    // the "cache" being used by the interceptor / reviewers
     document.addEventListener('now-offline', function() {
-        checkpoint.set(cache.version);
-        cache = window.openNewDataCache();
-        cache.swapCache();
+        queue.reset();
     }, false);
 
-    // Transitioning to Online
-    // Update each modified resource
     document.addEventListener('now-online', function() {
-
-        if (checkpoint.version === cache.version)
-            return;
-
         var itemCount = 0;
-        var highVersion = cache.version;
+        queue.process(itemCallback, successCallback);
 
-        // FIXME: going back all the way (null) because we cannot
-        // trust the previous versions. This will be investigated.
-        cache.eachModificationSince(null, itemCallback, successCallback);
-
-        function itemCallback(item, uri) {
-            var method = null;
-            if (checkpoint.wasCreated(uri))
-                method = 'POST';
-            else if (checkpoint.wasDeleted(uri))
-                method = 'DELETE';
-            else if (checkpoint.wasChanged(uri))
-                method = 'PUT';
-            else
-                return;
-
+        function itemCallback(uri, method) {
+            console.log('itemCallback', uri, method);
             itemCount++;
+            var tx = cache.transactionSync();
+            var item = tx.cache.getItem(uri); // FIXME: Private API, needed because its synchronous...
             var xhr = new XMLHttpRequest();
             xhr.open(method, uri, false); // Synchronous for testing
             xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
@@ -361,9 +388,8 @@
 
         function successCallback() {
             console.log('successly resynchronized/updated %d items', itemCount);
-            checkpoint.set(highVersion);
+            TwitterBox.Pull();
         }
-
     }, false);
 
 })();

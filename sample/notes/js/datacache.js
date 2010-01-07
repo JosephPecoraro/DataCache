@@ -192,6 +192,19 @@ DataCache.setOnlineOfflineStatus = function(isOffline) {
     }
 }
 
+DataCache.purge = function() {
+    DataCache.Storage.all(function(all) {
+        for (var i=0; i<all.length; ++i) {
+            var r = all[i];
+            if (typeof r === 'object' && 'key' in r && 'data' in r) {
+                var data = r.data;
+                if (data.readyState && data.readyState === CacheItem.GONE)
+                    DataCache.Storage.remove(r.key);
+            }
+        }
+    });
+}
+
 DataCache.resolveAbsoluteFromBase = function(location, uri) {
 
     // Remove scheme if it exists
@@ -1290,6 +1303,8 @@ CacheEvent.prototype = {
         // NOTE: Idea: make this an exponential back off?
         var repeatDuration = 10000;
         var cutoffDuration = repeatDuration / 2;
+        var loc = window.location;
+        var href = loc.href.replace(/#.*?$/, '') + (loc.search.length > 0 ? '&' : '?');
 
         function autoDetect(force) {
 
@@ -1297,8 +1312,7 @@ CacheEvent.prototype = {
             // then don't bother checking. (Reduce the number of requests).
             var now = Date.now();
             var key = 'DataCacheAutoDetect';
-            var loc = window.location;
-            var uri = loc.href + (loc.search.length > 0 ? '&' : '?') + 'cachebuster=' + now;
+            var uri = href + 'cachebuster=' + now;
             if (!force) {
                 var cutoff = now - cutoffDuration;
                 var lastAttempt = localStorage.getItem(key);

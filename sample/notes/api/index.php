@@ -11,14 +11,23 @@ function decode($incoming) {
   return json_decode(preg_replace('/\\\\"/', '"', $incoming), true);
 }
 
+function doesExist($id) {
+  $sql = sprintf("select id from `drafts` where `id` = %d",
+    mysql_real_escape_string($id));
+  $result = mysql_query($sql) or die(mysql_error());
+  return (mysql_num_rows($result) == 1);
+}
+
 // ----------------
 //   CRUD Actions
 // ----------------
 
 function create($data) {
   $o = decode($data['data']);
+  $exists = doesExist($o['id']);
+  $id = ($exists ? 'null' : $o['id']);
   $sql = sprintf("insert into `drafts` values(%d, '%s', '%s', %d, %d, %d)",
-    mysql_real_escape_string($o['id']),
+    mysql_real_escape_string($id),
     mysql_real_escape_string($o['timestamp']),
     mysql_real_escape_string($o['content']),
     mysql_real_escape_string($o['x']),
@@ -26,6 +35,11 @@ function create($data) {
     mysql_real_escape_string($o['z']));
   mysql_query($sql) or die(mysql_error());
   headercode(201);
+  
+  // If there was a conflict, we ignored the existing id, and created
+  // a new id. Send back the new id.
+  if ($exists)
+    echo mysql_insert_id();
 }
 
 function retrieve() {

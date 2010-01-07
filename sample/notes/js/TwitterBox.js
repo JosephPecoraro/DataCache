@@ -155,7 +155,7 @@ TwitterBox.prototype = {
     setText: function(txt, avoidUpdate) {
         this.bodyElement.textContent = txt;
         this.updateCount();
-        if (!avoidUpdate)
+        if (avoidUpdate !== true)
             this._updated();
     },
 
@@ -171,7 +171,7 @@ TwitterBox.prototype = {
     },
 
     dispose: function(avoidUpdate) {
-        if (!avoidUpdate)
+        if (avoidUpdate !== true)
             this._deleted();
         this.boxElement.parentNode.removeChild(this.boxElement);
         delete TwitterBox.table[this.id];
@@ -197,32 +197,50 @@ TwitterBox.prototype = {
         return JSON.stringify(this.toJSONObject());
     },
 
-    _sendData: function(method, page) {
+    _sendData: function(method, page, callback) {
+        var self = this;
         this.timestamp = Date.now();
         var xhr = new XMLHttpRequest();
         xhr.open(method, page, true);
         var data = 'data=' + encodeURIComponent(this.toJSONString());
         xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-        xhr.onload = function() { console.log('success', xhr, xhr.responseText); }
         xhr.onerror = function() { console.log('error', xhr, xhr.responseText); }
+        xhr.onload = function() { console.log('success', xhr, xhr.responseText);
+            if (callback)
+                callback(xhr.responseText);
+        }
         xhr.send(data);
     },
 
     _created: function() {
-        console.log('_created');
-        this._sendData('POST', 'api/');
+        // console.log('_created');
+        this._sendData('POST', 'api/', bindFunc(this._updateId, this));
     },
 
     _deleted: function() {
-        console.log('_deleted');
+        // console.log('_deleted');
         this._sendData('DELETE', 'api/'+this.id);
         this.dispatchEvent('deleted', null, this.toJSONObject());
     },
 
     _updated: function() {
-        console.log('_updated');
+        // console.log('_updated');
         this._sendData('PUT', 'api/'+this.id);
         this.dispatchEvent('updated', null, this.toJSONObject());
+    },
+
+    _updateId: function(newId) {
+        if (newId.length === 0)
+            return;
+
+        var oldId = this.id;
+        console.log('updating box-'+ oldId + ' to be box-' + newId);
+        if (String(oldId) !== String(newId)) {
+            this.id = parseInt(newId);
+            this.boxElement.id = 'box-'+this.id;
+            delete TwitterBox.table[oldId];
+            TwitterBox.table[newId] = this;
+        }
     },
 
     mousedown: function(event) {
@@ -252,7 +270,8 @@ TwitterBox.prototype = {
             var offsetY = event.clientY - startY;
             self.x = (self.x+offsetX);
             self.y = (self.y+offsetY);
-            self._updated();
+            if (offsetX !== 0 || offsetY !== 0)
+                self._updated();
         }
     },
 

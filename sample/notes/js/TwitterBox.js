@@ -416,7 +416,6 @@ TwitterBox.Pull = function() {
 
         // Create New Boxes and Animating Existing Boxes
         for (var i=0, len=json.length; i<len; ++i) {
-
             var o = json[i];
             o.timestamp = parseInt(o.timestamp);
             o.id = parseInt(o.id);
@@ -446,7 +445,7 @@ TwitterBox.Pull = function() {
             if (boxElement.handled)
                 delete boxElement.handled;
             else
-                TwitterBox.table[parseInt(boxElement.id.substring(4))].dispose(true);
+                TwitterBox.table[boxElement.id.substring(4)].dispose(true);
         }
     }
 }
@@ -469,7 +468,6 @@ TwitterBox.Pull = function() {
 //   TwitterBox.animate(animations, 1000);
 
 TwitterBox.animate = function(animations, duration, callback) {
-
     var interval;
     var complete = 0;
     var defaultUnit = 'px';

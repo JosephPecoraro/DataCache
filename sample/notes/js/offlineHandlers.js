@@ -305,27 +305,70 @@
 
     reviewer.GET = function(request, response) {
         var o = null;
-        try { o = JSON.parse(response.bodyText); } catch (e) { console.log(response); return; }
+        try { o = JSON.parse(response.bodyText); } catch (e) { return; }
         if (!o) return;
 
         // Locally cache each object from the server
         // Since the offlineTransaction is async, prevent closure mistakes
         // by running it in a function where all the dynamic variables (obj)
         // are passed in and thus made static.
+        //
+        // We assume this was the list of all items. Now we must detect
+        // Deleted items that we still have a copy of, but were deleted
+        // on another client.
+        var allItems = [];
         for (var i=0, len=o.length; i<len; ++i) {
-            (function(obj) {
-                cache.offlineTransaction(function(tx) {
-                    var key = apiURI+obj.id;
-                    savedItems.add(key);
-                    var bodyText = 'data=' + encodeURIComponent(JSON.stringify(obj));
-                    tx.capture(key, bodyText, 'application/json', dynamicMethods);
-                    tx.commit();
-                });
-            })(o[i]);
+            allItems.push(apiURI+o[i].id);
+            processAdd(o[i]);
+        }
+
+        var itemsWeKnow = [];
+        for (var key in savedItems.items)
+            itemsWeKnow.push(key);
+        for (var key in queue.uris)
+            allItems.push(key);
+
+        console.log('all items (received and queued)', allItems);
+        console.log('items we know (cached)', itemsWeKnow);
+
+        for (var i=0, len=itemsWeKnow.length; i<len; ++i) {
+            var item = itemsWeKnow[i];
+            if (allItems.indexOf(item) === -1)
+                processDelete(item)
+        }
+
+        function processAdd(obj) {
+            cache.offlineTransaction(function(tx) {
+                var key = apiURI+obj.id;
+                savedItems.add(key);
+                var bodyText = 'data=' + encodeURIComponent(JSON.stringify(obj));
+                tx.capture(key, bodyText, 'application/json', dynamicMethods);
+                tx.commit();
+            });
+        }
+
+        function processDelete(key) {
+            console.log('detected deletion of', key);
+            cache.offlineTransaction(function(tx) {
+                savedItems.remove(key);
+                tx.release(key);
+                tx.commit();
+            });
         }
     }
 
-    reviewer.POST = reviewer.PUT = function(request, response) {
+    reviewer.POST = function(request, response) {
+        if (response.statusCode < 400) {
+            if (response.bodyText.length > 0) {
+                saveItem(request);
+                updateCacheItem(request.bodyText, response.bodyText);
+            } else {
+                saveItem(request)
+            }
+        }
+    }
+
+    reviewer.PUT = function(request, response) {
         if (response.statusCode < 400)
             saveItem(request);
     }
@@ -341,6 +384,7 @@
     // --------------------
     // NOTE: This is doing the work that PHP does in the background.
     // This parses the query data into a hash table and decodes them.
+    // Or resolves handling double POST conflicts.
 
     function parseQueryData(data) {
         data = data.replace(/\+/g, ' ');
@@ -357,6 +401,26 @@
     function parseBoxObjectFromRequest(data) {
         var hash = parseQueryData(data);
         return JSON.parse(hash.data);
+    }
+
+    function updateTwitterBoxId(bodyText, newId) {
+        var obj = parseBoxObjectFromRequest(bodyText);
+        TwitterBox.table[obj.id]._updateId(newId);
+    }
+
+    function updateCacheItem(bodyText, newId) {
+        var obj = parseBoxObjectFromRequest(bodyText);
+        var key = apiURI+obj.id;
+        cache.offlineTransaction(function(tx) {
+            var newObj = TwitterBox.table[newId];
+            var newKey = apiURI+newObj.id;
+            console.log('moving a cache item', key, newKey, newObj);
+            savedItems.remove(key);
+            tx.release(key);
+            savedItems.add(newKey);
+            tx.capture(newKey, 'data='+encodeURIComponent(newObj.toJSONString()), request.headers['Content-Type'], dynamicMethods);
+            tx.commit();
+        });
     }
 
 
@@ -381,7 +445,11 @@
             xhr.open(method, uri, false); // Synchronous for testing
             xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
             xhr.setRequestHeader('X-Bypass-DataCache', 'true'); // purposely avoid the DataCache!
-            xhr.onload = function() { console.log('Xsuccess', xhr, xhr.responseText); }
+            xhr.onload = function() { console.log('Xsuccess', xhr, xhr.responseText);
+                if (method === 'POST' && xhr.responseText.length > 0) {
+                    updateTwitterBoxId(item.body, xhr.responseText);
+                }
+            }
             xhr.onerror = function() { console.log('Xerror', xhr, xhr.responseText); } // FIXME: in case of sync error
             xhr.send(item.body);
         }

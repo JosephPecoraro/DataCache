@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DataCache Use Case 5</title>
+
+    <!-- Testing Libraries -->
+    <link rel="stylesheet" href="shoulda.css" type="text/css" media="screen" title="no title" charset="utf-8">
+    <script src="qunit.js" type="text/javascript" charset="utf-8"></script>
+    <script src="shoulda.js" type="text/javascript" charset="utf-8"></script>
+    <script src="use-case-helpers.js" type="text/javascript" charset="utf-8"></script>
+
+    <!-- The LawnChair and DataCache API -->
+    <script src="../deps/adaptors/Helpers.js" type="text/javascript" charset="utf-8"></script>
+    <script src="../deps/adaptors/DOMStorageAdaptor.js" type="text/javascript" charset="utf-8"></script>
+    <script src="../deps/lawnchair.js" type="text/javascript" charset="utf-8"></script>
+    <script src="../src/datacache.js" type="text/javascript" charset="utf-8"></script>
+</head>
+<body>
+    <h2 id="qunit-banner">DataCache Use Case 5 [offline]</h2>
+    <h2 id="qunit-userAgent"></h2>
+    <ol id="qunit-tests"></ol>
+
+<!-- Test Case -->
+<script type="text/javascript" charset="utf-8">
+context('DataCache Library', function() {
+    DataCache.Offline = true;
+    document.addEventListener('now-online', function() {
+        DataCache.Offline = true;
+    }, false);
+
+    should('supports async MutableResponse.send', function() {
+        stop();
+        expect(4);
+
+        var uri = 'viewcount.txt';
+        var cache = window.openDataCache();
+        cache.offlineTransaction(function(tx) {
+            addToOrder(0, 'blank offline cache');
+            tx.capture(uri, '', '', ['PUT']);
+            tx.commit();
+        });
+
+        function interceptor(request, response) {
+
+            // Validation, the request should contain a
+            // positive number, otherwise this is a bad request.
+            var body = request.bodyText;
+            var asNumber = parseInt(body);
+            if (isNaN(asNumber) || asNumber <= 0) {
+                addToOrder(1, 'interceptor with bad data');
+                response.setStatus(400, 'HTTP/1.1 400 Bad Request');
+                response.send();
+                return;
+            }
+
+            // Update the cached resource with the new value.
+            // Act like the server would.
+            addToOrder(3, 'interceptor with good data');
+            cache.offlineTransaction(function(tx) {
+                tx.oncommitted = function() {
+                    addToOrder(5, 'asynchronous MutableResponse send');
+                    response.setResponseText(request.bodyText);
+                    response.setResponseHeader('Content-Type', 'text/plain');
+                    response.setStatus(200, 'HTTP/1.1 200 OK');
+                    response.send();
+                }
+
+                tx.capture(request.target, request.bodyText, request.headers['Content-Type'], ['PUT']);
+                tx.commit();
+            });
+            addToOrder(4, 'async proof');
+        }
+
+        function reviewer(request, response) {
+           cache.offlineTransaction(function(tx) {
+               tx.capture(request.target, response.bodyText, response.headers['Content-Type'], ['PUT']);
+               tx.commit();
+           });
+        }
+
+        navigator.registerOfflineHandler(uri, interceptor, reviewer);
+
+        var data = '-1';
+        var xhr = new XMLHttpRequest();
+        xhr.open('PUT', uri);
+        xhr.onload = verifyAndSendSecond;
+        xhr.send(data);
+
+        function verifyAndSendSecond() {
+            addToOrder(2, 'xhr.onload with bad data');
+            ok(xhr.status === 400);
+
+            data = '10';
+            xhr = new XMLHttpRequest();
+            xhr.open('PUT', uri);
+            xhr.onload = verifyLast;
+            xhr.send(data);
+        }
+
+        function verifyLast() {
+            addToOrder(6, 'xhr.onload with good data');
+            ok(xhr.status === 200);
+            ok(xhr.responseText === data);
+            ok(checkOrder());
+            start();
+        }
+    });
+});
+</script>
+
+</body>
+</html>

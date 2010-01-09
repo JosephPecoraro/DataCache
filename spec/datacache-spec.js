@@ -721,6 +721,51 @@ context('Local Server', function() {
             start();
         });
     });
+
+    should('dispatch async', function() {
+        stop(); expect(3);
+
+        DataCache.Offline = true;
+
+        var uri = 'data.txt', body = 'Hello, World!', method = 'GET';
+        var uri2 = 'blah.txt', body2 = '!dlroW ,olleH', method2 = 'GET';
+        var cache = window.openDataCache();
+        cache.offlineTransaction(function(tx) {
+            tx.capture(uri, body, null, [method]);
+            tx.capture(uri2, body2, null, [method2]);
+            cache.commit();
+        });
+
+        function interceptor(request, response) {
+            cache.offlineTransaction(function(tx) {
+                tx.getItem('blah.txt', function(item) {
+                    ok(true, 'inside double async call');
+                    response.setStatus(200, Http.Status[200]);
+                    response.setResponseText(item.body);
+                    response.send();
+                });
+            });
+        }
+
+        function verify() {
+            if (xhr.readyState === 4) {
+                ok(xhr.status === 200, 'successful response');
+                ok(xhr.responseText === body2, 'body is that of the other entry due to async lookup!');
+            }
+        }
+
+        var xhr = new XMLHttpRequest();
+        xhr.open(method, uri);
+        xhr.onreadystatechange = verify;
+        xhr.send();
+
+        navigator.registerOfflineHandler(uri, interceptor, function(){});
+
+        setTimeout(function() {
+            navigator.removeRegisteredOfflineHandlers();
+            start();
+        }, LATENCY);
+    });
 });
 
 

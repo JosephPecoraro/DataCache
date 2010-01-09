@@ -597,6 +597,8 @@ MutableHttpResponse.prototype = {
         if (this._dispatched)
             return;
         this._dispatched = true;
+        if (this._afterSend) // hook for interception callback
+            this._afterSend();
     }
 };
 
@@ -736,27 +738,27 @@ CacheEvent.prototype = {
             this.servers.push(server);
         },
 
-        handleRequest: function(ixhr, method, uri, data, headers, async) {
+        handleRequest: function(ixhr, method, uri, data, headers, async, callback) {
 
             // Immediate return if a bypass header is set
             if (headers['X-Bypass-DataCache'] === 'true')
-                return false;
+                return callback(false);
 
             // NOTE: known to be only one group, may change in the future
             var item = null;
             var cache = this.groups[0].effectiveCache;
             try { item = cache.getItem(uri); } catch (e) {}
             if (!item)
-                return false;
+                return callback(false);
 
             // Captured but not yet ready
             if (item.readyState !== CacheItem.CACHED)
-                return false;
+                return callback(false);
 
             // Non Dynamic Request, pull from cache, represent as a response
             // NOTE: a HEAD request should have a null body
             if (item.dynamicMethods.indexOf(method) === -1)
-                return new HttpResponse(200, Http.Status[200], (method === 'HEAD' ? null : item.body), item.headers);
+                return callback(new HttpResponse(200, Http.Status[200], (method === 'HEAD' ? null : item.body), item.headers));
 
             // Find Specific Candidate Server
             var resolvedURI = DataCache.resolveAbsoluteFromBase(window.location, uri);
@@ -767,22 +769,34 @@ CacheEvent.prototype = {
             // Create the Request
             var request = new HttpRequest(method, resolvedURI, data, headers);
 
-            // Offline => Mutable Response for the interceptor
-            function handleWhenOffline() {
+            // Offline => MutableResponse for the interceptor
+            function handleWhenOffline(myOwnCallback) {
                 var mutableResponse = new MutableHttpResponse(0, '', '', {});
-                server.interceptor(request, mutableResponse); // reference will get modified
-                if (!mutableResponse._dispatched) // undefined
-                    console.error('DataCache: a MutableHttpResponse was intercepted and modified without send(). Using as is.');
-                return mutableResponse;
+
+                // Network Timeout
+                var simulatedNetworkTimeout = setTimeout(function() {
+                    console.error('DataCache: a MutableHttpResponse was intercepted and modified without send() in time. Simulated network timeout.');
+                    ixhr.xhr.abort(); // abort to simulate timeout.
+                }, DataCache.TimeoutDuration);
+
+                // Allow for an async send() dispatch
+                mutableResponse._afterSend = function() {
+                    clearTimeout(simulatedNetworkTimeout);
+                    myOwnCallback(mutableResponse);
+                }
+
+                // Mutable reference will get modified
+                server.interceptor(request, mutableResponse);
             }
 
             // States
             var self = this;
             var oldReadyStateHandler = ixhr.onreadystatechange;
+            var xhr = ixhr.xhr;
 
             // We are Offline right now
             if (DataCache.Offline)
-                return handleWhenOffline();
+                return handleWhenOffline(callback);
 
             // Set a Timer to artifically determine if we are Online/Offline
             var ABORTED = false;
@@ -790,16 +804,16 @@ CacheEvent.prototype = {
                 ABORTED = true;
                 xhr.abort();
                 DataCache.setAsOffline(); // potential transition to offline
-                var mutableResponse = handleWhenOffline();
-                ixhr.onreadystatechange = oldReadyStateHandler;
-                ixhr.handleHttpResponse(mutableResponse);
+                handleWhenOffline(function(mutableResponse) {
+                    ixhr.onreadystatechange = oldReadyStateHandler;
+                    ixhr.handleHttpResponse(mutableResponse);
+                });
             }, DataCache.TimeoutDuration);
 
             // Synchronous XHR should be handled synchronously
-            var xhr = ixhr.xhr;
             if (!async) {
                 xhr.send(data);
-                return this.httpResponseFromXhr(xhr);
+                return callback(this.httpResponseFromXhr(xhr));
             }
 
             // We will need to issue the XHR on our own
@@ -812,7 +826,8 @@ CacheEvent.prototype = {
                     clearTimeout(connectivityDetectionTimer);
                     DataCache.setAsOnline(); // potential transition to online
                     var response = self.httpResponseFromXhr(xhr);
-                    server.reviewer(request, response);
+                    if (server.reviewer)
+                        server.reviewer(request, response);
                     ixhr.onreadystatechange = oldReadyStateHandler;
                     ixhr.handleHttpResponse(response);
                 }
@@ -822,7 +837,7 @@ CacheEvent.prototype = {
             ixhr.onreadystatechange = readyStateHandler;
             xhr.onreadystatechange = ixhr._generateReadyStateHandler();
             xhr.send(data);
-            return true;
+            return callback(true);
         },
 
         _candidateServerForUri: function(resolvedURI) {
@@ -1169,26 +1184,28 @@ CacheEvent.prototype = {
             function action() {
 
                 // Inject our own Network logic
-                var response = DataCache.GlobalHost.handleRequest(self, self._method, self._uri, data, self._headers, self._async);
-                delete self._headers;
-                delete self._method;
-                delete self._async;
-                delete self._uri;
+                DataCache.GlobalHost.handleRequest(self, self._method, self._uri, data, self._headers, self._async, function(response) {
+                    delete self._headers;
+                    delete self._method;
+                    delete self._async;
+                    delete self._uri;
 
-                // Response may be:
-                //   true:         handled asynchronously
-                //   HttpResponse: was handled and here is the result
-                //   false:        was not handled (pass through)
-                if (response === true)
-                    return;
-                if (response) {
-                    self.handleHttpResponse(response);
-                    return;
-                }
+                    // Response may be:
+                    //   true:         handled asynchronously
+                    //   HttpResponse: was handled and here is the result
+                    //   false:        was not handled (pass through)
+                    if (response === true)
+                        return;
+                    if (response) {
+                        self.handleHttpResponse(response);
+                        return;
+                    }
 
-                // Modified pass through
-                self.xhr.onreadystatechange = self._generateReadyStateHandler();
-                self.xhr.send.apply(self.xhr, outerArguments);
+                    // Modified pass through
+                    self.xhr.onreadystatechange = self._generateReadyStateHandler();
+                    self.xhr.send.apply(self.xhr, outerArguments);
+                });
+
             }
 
             if (this._async)

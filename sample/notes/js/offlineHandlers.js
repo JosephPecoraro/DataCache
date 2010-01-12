@@ -98,20 +98,35 @@
         },
 
         enqueue: function(uri, method) {
+
+            // Merge Optimization
+            // POST + PUT    = POST         (no change)
+            // PUT  + PUT    = PUT          (no change)
+            // POST + DELETE = remove entry (change)
+            // PUT  + DELETE = DELETE       (change)
             method = method.toUpperCase();
             if (uri in this.uris) {
                 if (method === 'DELETE') {
-                    this.queue[this.uris[uri]].method = method;
+                    var index = this.uris[uri];
+                    var curr = this.queue[index];
+                    if (curr.method === 'POST') {
+                        this.queue.splice(index, 1);
+                        delete this.uris[uri];
+                    } else {
+                        curr.method = method;
+                    }
                     this._store();
                 }
 
                 return;
             }
 
+            // New Request, add to queue
             var index = this.queue.length;
             this.queue.push({ uri: uri, method: method });
             this.uris[uri] = index;
             this._store();
+
         },
 
         process: function(itemCallback, successCallback, errorCallback) {

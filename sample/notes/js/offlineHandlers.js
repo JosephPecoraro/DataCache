@@ -200,8 +200,11 @@
 
     var cache = window.openDataCache();
     cache.offlineTransaction(function(tx) {
-        tx.capture(apiURI, null, null, dynamicMethods);
-        tx.commit();
+        // Drawback of DataCache: check if an item is cached.
+        try { tx.getItem(apiURI, function(){ tx.commit(); }); } catch (e) {
+            tx.capture(apiURI, null, null, dynamicMethods);
+            tx.commit();
+        }
     });
 
 
@@ -229,7 +232,7 @@
             return;
         }
 
-        // Advnaced Handling
+        // Advanced Handling
         var handler = interceptor[request.method.toUpperCase()];
         if (handler) {
             handler(request, response);
@@ -443,16 +446,12 @@
     //   Synchronization
     // -------------------
 
-    document.addEventListener('now-offline', function() {
-        queue.reset();
-    }, false);
-
     document.addEventListener('now-online', function() {
         var itemCount = 0;
         queue.process(itemCallback, successCallback);
 
         function itemCallback(uri, method) {
-            console.log('itemCallback', uri, method);
+            console.log('processing item', uri, method);
             itemCount++;
             var tx = cache.transactionSync();
             var item = tx.cache.getItem(uri); // FIXME: Private API, needed because its synchronous...
@@ -460,12 +459,12 @@
             xhr.open(method, uri, false); // Synchronous for testing
             xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
             xhr.setRequestHeader('X-Bypass-DataCache', 'true'); // purposely avoid the DataCache!
-            xhr.onload = function() { console.log('Xsuccess', xhr, xhr.responseText);
+            xhr.onload = function() { // DEBUG: console.log('Xsuccess', xhr, xhr.responseText);
                 if (method === 'POST' && xhr.responseText.length > 0) {
                     updateTwitterBoxId(item.body, xhr.responseText);
                 }
             }
-            xhr.onerror = function() { console.log('Xerror', xhr, xhr.responseText); } // FIXME: in case of sync error
+            xhr.onerror = function() { /* DEBUG: console.log('Xerror', xhr, xhr.responseText); */ }
             xhr.send(item.body);
         }
 

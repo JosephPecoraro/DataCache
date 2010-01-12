@@ -4,7 +4,7 @@ AddType text/cache-manifest manifest
 # Enable Rewriting
 RewriteEngine On
 
-# Rewrite user URLs
+# Rewrite api URLs
 #   Input:  api/ID/
 #   Output: api/index.php?id=ID
 RewriteRule ^api/([0-9]+)/?$ api/index.php?id=$1

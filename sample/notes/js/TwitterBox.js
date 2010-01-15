@@ -83,7 +83,7 @@ EventQueue.prototype = {
 //    setText(txt)  - sets the text
 //
 
-function TwitterBox(id, x, y, z, timestamp, content) {
+function TwitterBox(id, x, y, z, timestamp, content, isHidden) {
 
     // Parent
     EventQueue.call(this);
@@ -109,7 +109,7 @@ function TwitterBox(id, x, y, z, timestamp, content) {
     this.boxElement = document.createElement('div');
     this.boxElement.id = 'box-'+this.id;
     this.boxElement.className = 'box';
-    this.boxElement.style.cssText = 'left:'+this.x+'px;top:'+this.y+'px;z-index:'+this.z;
+    this.boxElement.style.cssText = 'left:'+this.x+'px;top:'+this.y+'px;z-index:'+this.z+';opacity:'+(isHidden?'0':'1');
 
     var ul = document.createElement('ul');
     append(ul, "\u2013", bindFunc(this.hide, this));
@@ -362,6 +362,15 @@ TwitterBox.prototype = {
         return null;
     },
 
+    fadeAnimation: function(isFadeIn) {
+        var style = this.boxElement.style;
+        return {
+            element: this.boxElement,
+            start: { opacity: style.opacity || (isFadeIn ? 0 : 1) },
+            end: { opacity: (isFadeIn ? 1 : 0) }
+        };
+    },
+
     updateFromJSON: function(o) {
         // NOTE: we don't actually move
         this.x = o.x;
@@ -390,7 +399,7 @@ TwitterBox.nextY = 40;
 TwitterBox.nextZ = 0;
 
 TwitterBox.createBox = function() {
-    var box = new TwitterBox(TwitterBox.nextId++, TwitterBox.lastX, TwitterBox.lastY, TwitterBox.nextZ++);
+    var box = new TwitterBox(TwitterBox.nextId++, TwitterBox.lastX, TwitterBox.lastY, TwitterBox.nextZ++, false);
     if (TwitterBox.lastY >= 350) {
         TwitterBox.lastX = TwitterBox.nextX;
         TwitterBox.lastY = TwitterBox.nextY;
@@ -410,7 +419,7 @@ TwitterBox.fromJSON = function(o) {
         TwitterBox.nextId = o.id+1;
     if (o.z >= TwitterBox.nextZ)
         TwitterBox.nextZ = o.z+1;
-    return new TwitterBox(o.id, o.x, o.y, o.z, o.timestamp, o.content);
+    return new TwitterBox(o.id, o.x, o.y, o.z, o.timestamp, o.content, true);
 }
 
 
@@ -419,12 +428,15 @@ TwitterBox.fromJSON = function(o) {
 // ----------------------
 
 TwitterBox.Pull = function() {
+
+    // Make a request
     var xhr = new XMLHttpRequest();
     xhr.open('GET', 'api/');
-    xhr.onerror = function() { console.log('failed', xhr); } // to be intercepted.
+    xhr.onerror = function() { console.log('failed', xhr); }
     xhr.onload = process;
     xhr.send();
 
+    // Process the results, add a little animation to spruce things up.
     function process() {
         var json = JSON.parse(xhr.responseText);
         if (!json)
@@ -433,7 +445,7 @@ TwitterBox.Pull = function() {
         var animations = [];
         var boxes = document.querySelectorAll('.box');
 
-        // Create New Boxes and Animating Existing Boxes
+        // Create New Boxes or Move Existing Boxes
         for (var i=0, len=json.length; i<len; ++i) {
             var o = json[i];
             o.timestamp = parseInt(o.timestamp);
@@ -443,9 +455,10 @@ TwitterBox.Pull = function() {
             o.z = parseInt(o.z);
 
             var existingBox = TwitterBox.table[o.id];
-            if (!existingBox)
-                TwitterBox.fromJSON(o);
-            else {
+            if (!existingBox) {
+                var box = TwitterBox.fromJSON(o);
+                animations.push(box.fadeAnimation(true));
+            } else {
                 var animation = existingBox.animationFor(o);
                 if (animation)
                     animations.push(animation);
@@ -454,18 +467,27 @@ TwitterBox.Pull = function() {
             }
         }
 
-        // Start the animation
-        if (animations.length > 0)
-            TwitterBox.animate(animations, 500);
-
         // Take care of any of the Boxes that were deleted (non-handled)
+        var toDelete = [];
         for (var i=0, len=boxes.length; i<len; ++i) {
             var boxElement = boxes[i];
             if (boxElement.handled)
                 delete boxElement.handled;
-            else
-                TwitterBox.table[boxElement.id.substring(4)].dispose(true);
+            else {
+                var box = TwitterBox.table[boxElement.id.substring(4)];
+                animations.push(box.fadeAnimation(false));
+                toDelete.push(box);
+            }
         }
+
+        // Start the animations, and dispose boxes afterwards
+        if (animations.length > 0) {
+            TwitterBox.animate(animations, 500, function() {
+                for (var i=0, len=toDelete.length; i<len; ++i)
+                    toDelete[i].dispose(true);
+            });
+        }
+
     }
 }
 

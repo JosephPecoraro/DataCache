@@ -5,7 +5,7 @@
  * Strategy:
  *   Fill up keys, with 0.25mb of data until hit the
  *   constraint. At that point, try 1kb of data at a
- *   time until we hit the constaint.
+ *   time until we hit the constraint.
  *
  * Results: (1/18/2010)
  *   Safari  ~ 2.5mb

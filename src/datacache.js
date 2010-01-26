@@ -798,7 +798,7 @@ CacheEvent.prototype = {
             if (DataCache.Offline)
                 return handleWhenOffline(callback);
 
-            // Set a Timer to artifically determine if we are Online/Offline
+            // Set a Timer to artificially determine if we are Online/Offline
             var ABORTED = false;
             var connectivityDetectionTimer = setTimeout(function() {
                 ABORTED = true;

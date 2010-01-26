@@ -7,7 +7,7 @@ Improvements / Changes over the Specification:
     BEWARE: these are very similar to the "online" and "offline" events
     introduced in Application Cache, [described here on MDC][oevents]
     and [here in HTML5][ohtml5]. For now, I will not transition to these
-    events to prevent duplicate invokations. Developers that wish to use
+    events to prevent duplicate invocations. Developers that wish to use
     both, may simply register the same handler to both events, and be aware
     of the potential for duplication.
 
